@@ -1,0 +1,12 @@
+server:
+  port: 8080
+
+
+spring:
+  mvc:
+    pathmatch:
+      matching-strategy: ant_path_matcher # 为了兼容swagger3.0 和 springboot2.6.x
+
+  profiles:
+    active: dev
+
