@@ -1,3 +1,25 @@
+# GIT指令
+
+```bash
+# 查看git版本
+git --version
+
+# 配置用户名
+git config --global --list      # 查看git配置的参数
+
+git config --global user.name jack                       # 配置用户名
+git config --global user.email 1037289945@qq.com         # 配置邮箱名
+
+# 创建项目
+# 1.1 本地创建git仓库：在对应的目录内，创建git项目，会有一个  .git来保存版本信息
+git init
+
+# 1.2 远程仓库
+git clone git@gitee.com:daydreamer9451/secret-manager.git
+```
+
+
+
  # 推送权限
 
 ## 1. SSH
@@ -14,3 +36,13 @@ git@github.com:bootstrap-captain/java-develop-doc.git
 ```
 
 ![image-20230613154729902](https://erick-typora-image.oss-cn-shanghai.aliyuncs.com/img/image-20230613154729902.png)
+
+# 其他细节
+
+## 1. git忽略
+
+```bash
+# 项目添加 .gitignore文件
+* .class就会忽略所有的class文件
+```
+
