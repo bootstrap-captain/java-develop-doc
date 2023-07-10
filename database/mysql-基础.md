@@ -88,7 +88,7 @@ SELECT now();SELECT version();SELECT user();
 docker pull mysql:8.0.26
 #  1.1 -e: 配置数据库的密码，数据库用户名默认为root；
 #  1.2 修改时区
-docker run --name erick_mysql -e TZ=Asia/Shanghai -e MYSQL_ROOT_PASSWORD=123456 -d -p 3307:3306 mysql:8.0.26 
+docker run --name erick_mysql -e TZ=Asia/Shanghai -e MYSQL_ROOT_PASSWORD=123456 -d -p 3306:3306 mysql:8.0.26 
 
 # 2. 进入容器，通过容器名称或者容器id
 docker exec -it erick_mysql bash
@@ -1022,19 +1022,25 @@ SELECT * FROM information_schema.TABLE_CONSTRAINTS WHERE TABLE_NAME='employee';
 
 ## NOT NULL
 
-- 空字符串‘’不等于null
+- 所有类型的值都可以是NULL, 包括int，float等数据类型
+- 只能出现在表的列上，不能表级约束
+- 只能限制单列，可定义多个
+- 空字符串‘’和0不等于null
+- 该约束不会出现在information_schema.TABLE_CONSTRAINTS中, 可以通过DESC来查看
 
 ```sql
-CREATE TABLE erick (name VARCHAR(20) NOT NULL)
-
+# 1.创建时
+CREATE TABLE erick (name VARCHAR(20) NOT NULL);
+ 
+# 2. 创建后
 ALTER TABLE erick
     ADD COLUMN address VARCHAR(20) NOT NULL;
- 
+
 ALTER TABLE erick
     MODIFY address VARCHAR(40) NOT NULL;
     
- -- 2. 删除约束
- ALTER TABLE erick
+# 3. 删除约束
+ALTER TABLE erick
     MODIFY address VARCHAR(40) NULL;
 ```
 
@@ -1047,14 +1053,24 @@ ALTER TABLE erick
 - 唯一约束默认会创建一个唯一索引
 
 ```sql
--- 建表后添加
-ALTER TABLE erick
-    ADD UNIQUE name_unique_index (name);
+# 1.创建时： 可以指定约束名， 可以不指定
+CREATE TABLE erick (name VARCHAR(20) UNIQUE);       # 列约束
+
+CREATE TABLE lucy (id int, name VARCHAR(20),
+CONSTRAINT uk_name UNIQUE(name));                   # 表级约束，可以指定约束名uk_name，也可以不指定
     
-ALTER TABLE erick
-    MODIFY address varchar(20) UNIQUE;
-    
--- 多行数据的约束    
+# 2. 创建后    
+ALTER TABLE lucy
+    ADD CONSTRAINT uk_name UNIQUE (name);           # 表级约束
+
+ALTER TABLE lucy
+    ADD COLUMN address VARCHAR(20) UNIQUE;          # 列级约束
+
+ALTER TABLE lucy
+    MODIFY address VARCHAR(20) UNIQUE;             # 列级约束
+   
+   
+# 3. 多行数据的约束: 如果不指定约束名，则和复合约束的第一个列名一样
 CREATE TABLE user
 (
     id       INT,
@@ -1063,7 +1079,7 @@ CREATE TABLE user
     CONSTRAINT uk_user_name UNIQUE (name, password)
 );
 
--- 删除：只能通过删除对应的索引
+# 4. 删除：只能通过删除对应的索引
 ALTER TABLE user
     DROP INDEX uk_user_name;
 ```
@@ -1071,23 +1087,32 @@ ALTER TABLE user
 ## PRIMARY KEY
 
 - 主键约束：相当于非空+唯一约束
-- 一个表最多只能包含一个主键约束，并且一般都会包含一个
+- 一个表最多并且一般都会包含一个
 - 主键约束对应表中的一列或多列， 多列的时候每个列都不允许为null
-- 主键名永远是 PRIMARY，就算自定义名字都没用
+- 主键名永远是 PRIMARY
 - 主键约束对应主键索引
+- 一般不要去修改主键的值
 
 ```sql
--- 创建表
+# 1. 创建表时
 CREATE TABLE my_erick
 (
     id   INT PRIMARY KEY,
     name varchar(20)
-)
+);                                   # 列级约束
 
+CREATE TABLE my_erick
+(
+    id   INT ,
+    name varchar(20),
+    CONSTRAINT PRIMARY KEY(id)
+);                                  # 表级约束
+
+# 2. 创建表后
 ALTER TABLE people
     MODIFY id int PRIMARY KEY;
 
--- 复合主键
+# 3. 复合主键
 CREATE TABLE my_erick_tb
 (
     id   INT,
@@ -1095,7 +1120,7 @@ CREATE TABLE my_erick_tb
     PRIMARY KEY (id, name)
 )
 
--- 删除主键约束
+# 4. 删除主键约束
 ALTER TABLE my_erick_tb
     DROP PRIMARY KEY;
 ```
@@ -1237,3 +1262,4 @@ FROM employee;   --如果有就替换
 - 特别是嵌套的视图
 - 小项目建议不要用视图，大项目考虑情况去使用
 ```
+
