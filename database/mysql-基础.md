@@ -101,7 +101,7 @@ quit
 ctrl + d
 
 # Docker中存放对应的数据库的目录
-/var/lib/mysql
+/var/lib/mysql/库名/表名
 ```
 
 ```bash
