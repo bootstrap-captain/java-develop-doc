@@ -3,9 +3,12 @@ package com.erick.boot.kafka.controller;
 import lombok.RequiredArgsConstructor;
 import org.apache.kafka.clients.producer.ProducerRecord;
 import org.springframework.kafka.core.KafkaTemplate;
+import org.springframework.kafka.support.SendResult;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+
+import java.util.concurrent.CompletableFuture;
 
 @RequestMapping("/produce")
 @RestController
@@ -16,7 +19,7 @@ public class ProducerController {
     @GetMapping("/send")
     public void send(String topicName, String key, String data) {
         ProducerRecord<String, String> producerRecord = new ProducerRecord(topicName, key, data);
-        kafkaTemplate.send(producerRecord);
+        CompletableFuture<SendResult<String, String>> send = kafkaTemplate.send(producerRecord);
     }
 
     @GetMapping("/send/batch/random/")

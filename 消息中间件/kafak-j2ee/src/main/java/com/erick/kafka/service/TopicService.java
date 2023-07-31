@@ -6,16 +6,14 @@ import org.apache.kafka.clients.admin.CreateTopicsResult;
 import org.apache.kafka.clients.admin.NewTopic;
 import org.springframework.stereotype.Service;
 
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.List;
-import java.util.Set;
+import java.util.*;
 
 @Service
 @RequiredArgsConstructor
 public class TopicService {
 
     private final AdminClient adminClient;
+
 
     public void deleteTopic(String... topicNames) {
         adminClient.deleteTopics(Arrays.stream(topicNames).toList());
@@ -27,6 +25,7 @@ public class TopicService {
          * 参数2： 分区数：分区数小于服务器数
          * 参数3： 副本数：副本数应该是服务器数-1*/
         NewTopic topic = new NewTopic(topicName, 1, (short) 2);
+        Map<String, String> configs = topic.configs();
         topics.add(topic);
         CreateTopicsResult createTopicsResult = adminClient.createTopics(topics);
         System.out.println(createTopicsResult);
