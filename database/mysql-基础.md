@@ -78,32 +78,6 @@ SELECT now(),version(),user()\c
 SELECT now();SELECT version();SELECT user();
 ```
 
-## 3. 安装-8.0.26
-
-- 安装mysql，其实就是安装DB和对应的DBMS
-- 开源RDBMS,  使用标准的SQL规范
-- 图形化界面工具： JetBrains的 DataGrip
-
-```bash
-docker pull mysql:8.0.26
-#  1.1 -e: 配置数据库的密码，数据库用户名默认为root；
-#  1.2 修改时区
-docker run --name erick_mysql -e TZ=Asia/Shanghai -e MYSQL_ROOT_PASSWORD=123456 -d -p 3306:3306 mysql:8.0.26 
-
-# 2. 进入容器，通过容器名称或者容器id
-docker exec -it erick_mysql bash
-# 3. 默认用户名root打开mysql的命令行,输入密码
-mysql -u root -p             mysql -u root -p123456
-select version();
-# 4. 退出命令行
-exit
-quit
-ctrl + d
-
-# Docker中存放对应的数据库的目录
-/var/lib/mysql/库名/表名
-```
-
 ```bash
 SELECT now();   # 当前mysql的时间
 SELECT user();  # 当前账户的用户名，返回当前用户@服务端的内网ip   root@117.35.135.138  
