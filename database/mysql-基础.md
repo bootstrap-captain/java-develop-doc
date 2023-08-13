@@ -237,12 +237,11 @@ SHOW TABLES  FROM shuzhan_db;
 CREATE TABLE people (name char(20),weight INT,sex ENUM('F','M'));
 CREATE TABLE IF NOT EXISTS  people (name char(20),weight INT,sex ENUM('F','M'));
 
--- 存储引擎名字不区分大小写，如果该存储引擎在mysql中未启用，则会使用默认存储引擎；
 CREATE TABLE `people` (
   `name` char(20) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
   `weight` int(11) DEFAULT NULL,
   `sex` enum('F','M') COLLATE utf8mb4_unicode_ci DEFAULT NULL
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+) CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 ```
 
 #### 描述

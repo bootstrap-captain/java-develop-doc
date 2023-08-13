@@ -7,7 +7,7 @@
 
 ![image-20230731163537301](https://erick-typora-image.oss-cn-shanghai.aliyuncs.com/img/image-20230731163537301.png)
 
-### 1. 上传文件
+### 上传文件
 
 ```bash
 # mac本地, 将文件上传到linux服务器的/opt目录下
@@ -35,7 +35,7 @@ cp mysql-community-libs-8.0.27-1.el7.x86_64.rpm erick_mysql
 cp mysql-community-server-8.0.27-1.el7.x86_64.rpm erick_mysql
 ```
 
-### 2. CentOS7检查MySQL依赖
+### CentOS7检查MySQL依赖
 
 ```bash
 # 检查/tmp临时目录权限(必不可少)
@@ -43,18 +43,15 @@ cp mysql-community-server-8.0.27-1.el7.x86_64.rpm erick_mysql
 cd /
 chmod -R 777 /tmp
 
-# 检查存在libaio依赖
-# 存在时候的结果： libaio-0.3.109-13.el7.x86_64
-rpm -qa | grep libaio
-
-# 检查存在net-tools依赖
-# 存在时候的结果： net-tools-2.0-0.25.20131004git.el7.x86_64
+# 检查存在libaio依赖, 存在net-tools依赖
+# 存在时候的结果： libaio-0.3.109-13.el7.x86_64,     net-tools-2.0-0.25.20131004git.el7.x86_64
+rpm -qa | grep libaio 
 rpm -qa | grep net-tools
 ```
 
-### 3. 安装
+### 安装
 
-- 是严格按照下面的rpm顺序来安装
+- 严格按照下面rpm顺序
 
 ```shell
 cd opt/erick_mysql/
@@ -73,19 +70,14 @@ rpm -ivh mysql-community-libs-8.0.27-1.el7.x86_64.rpm
 rpm -ivh mysql-community-client-8.0.27-1.el7.x86_64.rpm
 
 rpm -ivh mysql-community-server-8.0.27-1.el7.x86_64.rpm
-```
 
-### 4. 检查安装情况
-
-```bash
+# 安装完毕后，检查安装是否成功
 # mysql  Ver 8.0.27 for Linux on x86_64 (MySQL Community Server - GPL)
 mysql --version
-
-# mysqladmin  Ver 8.0.27 for Linux on x86_64 (MySQL Community Server - GPL)
 mysqladmin --version
 ```
 
-### 5. 服务的初始化
+### 服务初始化
 
 - 为了保证数据库目录与文件的所有者为mysql登录用户，如果是以root身份运行mysql服务，需要执行命令初始化
 
@@ -113,7 +105,7 @@ systemctl enable mysqld.service
 systemctl disable mysqld.service
 ```
 
-### 6. 登录
+### 登录
 
 ```bash
 # 输入密码
@@ -129,7 +121,7 @@ alter user 'root'@'localhost' identified by '123456';
 show databases;
 ```
 
-### 7. 远程连接
+### 远程连接
 
 ```sql
 # 默认的root用户，只能是localhost来访问
@@ -143,7 +135,7 @@ UPDATE user SET host='%' WHERE user='root';
 FLUSH privileges;
 ```
 
-### 8. 密码安全强度-插件
+### 密码安全强度-插件
 
 - MySQL8.0之前，使用validate_password插件检测，验证账户密码强度，保障账户的安全性
 - 通过安装/启用插件：会注册到元数据，也就是mysql.plugin表中，mysql重启后插件不会失效
@@ -157,7 +149,7 @@ ALTER USER 'root'@'%' IDENTIFIED BY 'abc1234';
 ALTER USER 'root'@'%' IDENTIFIED BY 'Abc_1234';
 ```
 
-#### 8.1 查看具体要求
+#### 1 查看具体要求
 
 ```sql
 SHOW VARIABLES LIKE 'validate_password%';
@@ -183,7 +175,7 @@ Variable_name                         | Value  |
 | validate_password_policy             | MEDIUM | 0：low，只检查长度<br>1：medium，检查长度，数字，大小写，特殊字符<br>2：strong，检查长度，数字，大小写，特殊字符，字典文件 |
 | validate_password_special_char_count | 1      | 特殊字符的个数                                               |
 
-#### 8.2 修改安全策略
+#### 2 修改安全策略
 
 ```SQL
 # 修改安全策略
@@ -194,7 +186,7 @@ SET GLOBAL validate_password_policy=0/1/2;
 SET GLOBAL validate_password_length=6;
 ```
 
-#### 8.3 删除插件
+#### 3 删除插件
 
 ```
 mysql> UNINSTALL PLUGIN validate_password;
@@ -215,21 +207,20 @@ character_set_system,utf8mb3
 character_sets_dir,/usr/share/mysql-8.0/charsets/
 ```
 
-### 1. 各个级别字符集及比较规则
+### 各级别字符集及比较规则
 
-- CHARACTER SET：默认从上到下，如果不显式指明当前层的字符集，则使用上一层的字符集，如果上一层还没有，则继续向上找
-- COLLATE：类似
+- CHARACTER SET/COLLATE：从上到下，如果不显式指明当前层的字符集，则使用上一层的字符集
 
-#### 1.1 服务器级别
+#### 1.服务器级别
 
 - <font color=orange>character_set_server</font> ： 服务器级别的字符集
 
-#### 1.2 数据库级别
+#### 2.数据库级别
 
 - <font color=orange>character_set_database</font>： 当前数据库的字符集
 
 ```SQL
-# 创建时候指明
+# 创建时指明
 CREATE DATABASE db_test2 CHARACTER SET utf8mb4;
 
 # 修改字符集
@@ -239,7 +230,7 @@ ALTER DATABASE db_test2 CHARACTER SET utf8mb3;
 SHOW CREATE DATABASE db_test2;
 ```
 
-#### 1.3 表级别
+#### 3.表级别
 
 - 可以在创建或者修改表的时候指定表的字符集和比较规则
 
@@ -257,7 +248,7 @@ ALTER TABLE book1 CHARACTER SET utf8mb3;
 SHOW CREATE TABLE book1;
 ```
 
-#### 1.4 列级别
+#### 4.列级别
 
 ```sql
 # 创建
@@ -272,10 +263,10 @@ ALTER TABLE book2
     MODIFY name VARCHAR(20) CHARACTER SET utf8mb3;
 ```
 
-### 2. utf8和utf8mb4
+### utf8和utf8mb4
 
-- utf8表示一个字符需要1-4个字节来表示，比如a，b，c等就用1个字节，汉字就用3个字节
 - 字符集表示一个字符所用的最大字节长度
+- utf8：一个字符需要1-4个字节来表示，a，b，c用1字节，汉字用3字节
 - utf8mb3：阉割过的utf8字符集，只使用1-3个字节表示字符
 - utfbmb4：正宗的utf8字符集，使用1-4个字节表示字符，可以存储一些emoji表情
 - mysql中，utf8是utf8mb3的别名
@@ -330,35 +321,21 @@ SHOW VARIABLES LIKE '%_database';
 
 - sql_mode会影响mysql执行<font color=orange>SQL语法检查</font>以及<font color=orange>数据验证检查</font>
 
-### 1. 查看当前
-
 ```SQL
-# 当前会话
+# 查看当前
 SELECT @@SESSION.sql_mode;
+SELECT @@GLOBAL.sql_mode;
 
 ONLY_FULL_GROUP_BY,STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,
 NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION
 
-# 全局
-SELECT @@GLOBAL.sql_mode;
-```
-
-### 2. 修改
-
-```SQL
-# 临时设置： 一个会话，在图形化界面里面就是一个Console
-# 不管是GLOBAL还是SESSION，mysql重启后，数据都会丢失
-# 如果是GLOBAL，则可以省略 ： SET sql_mode='';
-SET GLOBAL sql_mode = '';                          # 全局设置
-SET SESSION sql_mode = '';                         # 当前会话
+# 修改
+SET GLOBAL sql_mode = '';                         
+SET SESSION sql_mode = '';                         
 SET SESSION sql_mode = 'STRICT_TRANS_TABLES'; # 恢复严格模式
 
-# 永久修改： 在my.conf文件修改，并重启MySQL
+# 配置文件修改
 sql_mode=ONLY_FULL_GROUP_BY,STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION
-
-# 修改方案
-- 先设置GLOABL，保证修改时候，不影响MYSQL服务
-- 再修改my.conf文件，保证后续重启后，就直接使用配置文件
 ```
 
 **宽松模式**
@@ -379,12 +356,12 @@ sql_mode=ONLY_FULL_GROUP_BY,STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERR
 
 ## 目录
 
-### 1. 配置文件
+### 配置文件
 
 -  数据库的启动配置文件
 - <font color=orange>/etc/my.conf</font>： 一般修改后，需要重启MySQL服务器，配置文件才会生效
 
-### 2. 数据目录
+### 数据目录
 
 - MySQL服务器启动后，会到文件系统的某些目录来加载一些文件，之后在运行中产生的数据也都会存储到这个目录下的某些文件夹
 
@@ -418,7 +395,90 @@ SHOW VARIABLES LIKE  'datadir';
 
 ## 变量
 
+### 1. 系统变量
 
+- 系统定义的，属于<font color=orange>服务器</font>层面。启动MySQL服务器实例期间，为服务器内存中的系统变量赋值
+- 定义了MySQL服务器实例的属性，特征，要么是<font color=orange>编译MySQL时参数的默认值</font>，要么是<font color=orange>配置文件</font>(my.conf)中的参数值
+- [官网系统变量](https://dev.mysql.com/doc/refman/8.0/en/server-system-variable-reference.html)
+- 如果一个变量，即时全局系统变量，也是会话系统变量，则修改时候一定要声明，到底是改的什么范围
+
+![image-20230807105100648](https://erick-typora-image.oss-cn-shanghai.aliyuncs.com/img/image-20230807105100648.png)
+
+#### 1.1 全局系统变量
+
+- <font color=orange>global</font>：在MySQL初始化启动后，所有的全局系统变量就已经加载好了
+- 修改后，针对所有会话都有效，但是服务器重启后，修改失效
+- <font color=orange>静态变量</font>：特殊的全局系统变量，在MySQL服务实例运行期间，它们的值不能使用set动态修改。如innodb_buffer_pool_instances
+
+```sql
+# 查看所有全局变量
+SHOW GLOBAL VARIABLES;
+
+# 查看满足条件的
+SHOW GLOBAL VARIABLES LIKE '%标识%';
+
+# 查看指定系统变量: @@是标记系统变量
+SELECT @@GLOBAL.变量名;
+
+# 先查找会话系统变量，如果不存在，则查找全局系统变量
+SELECT @@变量名;
+```
+
+#### 1.2 会话系统变量
+
+- <font color=orange>session</font>：会话连接后，会有默认值，也可以去设置这些值
+- 如果不写，默认会话级别
+- 只在当前会话有效，如果修改了某个会话系统变量的值，不会影响其他会话
+
+```sql
+# 查看所有会话变量, SESSION可以省略
+SHOW SESSION VARIABLES;
+SHOW VARIABLES;
+
+# 查看满足条件的
+SHOW SESSION VARIABLES LIKE '%标识%';
+
+# 查看指定系统变量
+SELECT @@SESSION.变量名;
+```
+
+#### 1.3 修改系统变量
+
+```bash
+#  方式一： 修改MySQL配置文件，达到修改MySQL系统变量的值
+- 修改方式是永久的
+- 必须重启MySQL服务器才能生效
+```
+
+```SQL
+# 方式二： 直接修改对应的系统变量
+
+# 全局系统变量：服务器重启后失效
+SET @@GLOBAL.变量名=变量值;
+SET GLOBAL 变量名=变量值;
+
+# 会话系统变量：不影响其他会话，会话关闭后失效
+SET @@SESSION.变量名=变量值;
+SET SESSION 变量名=变量值;
+```
+
+```bash
+# 推荐方案
+- 先设置GLOABL，保证修改时候，不影响MYSQL服务
+- 再修改my.conf文件，保证后续重启后，就直接使用配置文件
+```
+
+### 2. 用户变量
+
+- MySQL编码规范：用户变量，以一个 @ 开头
+
+#### 2.1  会话用户变量
+
+- 只针对当前会话有效
+
+#### 2.2 局部变量
+
+- 只在BEGIN和END语句块有效，只在<font color=orange>存储过程和函数</font>中使用
 
 # 用户与权限管理
 
@@ -804,11 +864,11 @@ SHOW PROFILE FOR QUERY 1 ;     # 查看当前所有的查询操作
 # 默认是128MB:  134217728
 SHOW VARIABLES LIKE 'innodb_buffer_pool_size';
 
-# 局部变量设置
+# 系统变量
 SET global innodb_buffer_pool_size =  134217728;
 SET global innodb_buffer_pool_size =  268435456;
 
-# 在 my.conf中修改
+# 配置文件
 [server]
 innodb_buffer_pool_size =  268435456
 ```
@@ -823,7 +883,7 @@ innodb_buffer_pool_size =  268435456
 # InnoDB: 默认是1
 SHOW VARIABLES LIKE 'innodb_buffer_pool_instances';
 
-# 修改: 只能在配置文件中修改
+# 静态变量： 只能在配置文件中修改
 [server]
 innodb_buffer_pool_instances = 2
 
@@ -843,3 +903,426 @@ innodb_buffer_pool_instances = 2          # 2实例
 
 ## 存储引擎
 
+- <font color=orange>存储引擎就是表的类型</font>，以前存储引擎叫做<font color=orange>表处理器</font>
+- 接收上层传下来的指令，对表中的数据进行提取或写入操作
+
+```sql
+# 查看当前版本支持的存储引擎
+SHOW ENGINES;
+
+# 修改: 全局系统变量
+SET DEFAULT_STORAGE_ENGINE = MyISAM;
+# 修改：配置文件
+default_storage_engine=MyISAM
+```
+
+![image-20230807113933141](https://erick-typora-image.oss-cn-shanghai.aliyuncs.com/img/image-20230807113933141.png)
+
+```sql
+# 库级别
+- 不能指定
+
+# 表级别: 如果不指定，就会使用全局系统变量中的
+CREATE TABLE goods
+(
+    id INT
+) ENGINE = MyISAM;
+
+# 查看
+SHOW CREATE TABLE goods;
+
+# 修改表的存储引擎
+ALTER TABLE goods ENGINE = InnoDB;
+```
+
+### 1. InnoDB vs MyISAM
+
+- 除非有特别的原因，需要使用其他的存储引擎，否则应该优先考虑InnoDB存储引擎
+
+|            | InnoDB | MyISAM |
+| :--------- | :----- | :----- |
+| 版本支持   | 默认   |        |
+| 支持事务   | Y      | N      |
+| 分布式事务 | Y      | N      |
+| 外键       | Y      | N      |
+
+# 事务
+
+- InnoDB支持事务和分布式事务，MyISAM不支持事务
+- 一组逻辑操作单元，使数据从一种状态变换到另一种状态
+- 处理原则：保证所有事务都作为<font color=orange>一个工作单元</font>来执行，即使出现故障，都不能改变这种执行方式
+
+## ACID特性
+
+### 1. Atomicity
+
+- 事务是一个不可分割的工作单位，要么全部提交，要么全部失败会滚，没有中间状态
+
+### 2. Consistency
+
+- 数据从一个<font color=orange>合法状态</font>变换到另一个<font color=orange>合法状态</font>，和具体的业务相关
+- <font color=orange>合法状态</font>：是和具体的业务相关的，满足<font color=orange>预定的约束</font>。满足这个状态，数据就是一致的，不满足就不是
+
+```bash
+# 例子一：不是一致的，因为余额不能小于0
+- A账户有200，B账户有0
+- A账户转给B账户300
+- 则A剩余-100， B账户有300
+
+# 例子二：不是一致的，因为默认A+B=200
+- A账户有200，B账户有0
+- A账户转给B账户50， 但B没收到
+- 则A剩余150， B账户有0
+
+# 例子三：不是一致的，因为姓名唯一
+- 将表中 姓名 字段设置为 唯一约束
+- 如果修改表中数据，如果姓名不唯一，则破坏了事务的一致性
+```
+
+### 3. Isolation
+
+- 一个事务的执行，不能被其他事务干扰
+- 一个事务的内部操作时，对应的数据，对<font color=orange>并发</font>的其他事务是隔离的，并发执行的各个事务之间，不能互相干扰
+
+```bash
+# A账户有200，B账户有0。 A往B转两次，每次转50。两次操作在两个事务中执行
+# 如果无法保证隔离性，则会出现下面情况
+```
+
+![image-20230807142654691](https://erick-typora-image.oss-cn-shanghai.aliyuncs.com/img/image-20230807142654691.png)
+
+### 4. Duration
+
+- 一个事务一旦被提交，它对数据库中数据的改变就是永久性的，接下来的其他操作和数据库故障，不应该对其有影响
+- 持久性是通过<font color=orange>事务日志</font>来保证的。包含<font color=orange>Redo日志</font>和<font color=orange>Undo日志</font>
+
+## 使用事务
+
+### 1. 隐式事务
+
+- AUTOCOMMIT
+
+```sql
+# 默认ON
+# 每个DML都是一个独立的事务，都是自动提交
+SHOW VARIABLES LIKE 'autocommit';
+
+INSERT INTO book1 (name) VALUE ('CCCC');
+```
+
+```sql
+# 关闭后，多个DML就都会被归结到一个事务中，需要手动提交
+SET AUTOCOMMIT=FALSE;
+
+# 不加COMMIT，则无法生效
+INSERT INTO book1 (name) VALUE ('AAAAA');
+
+INSERT INTO book1 (name) VALUE ('BBBBB');
+
+COMMIT;
+```
+
+### 2. 显式使用
+
+- 和AUTOCOMMIT无关
+
+```sql
+# 1. 开启事务
+START TRANSACTION READ ONLY;       # 开启一个只读的事务，不能进行写
+START TRANSACTION READ WRITE;      # 开启一个可读可写的事务
+START TRANSACTION;                 # 默认可读可写     
+BEGIN;                             # 开启可读可写
+
+# 2. 一系列DML操作: 也可以是一条语句
+
+# 3. 结束状态
+# 提交
+COMMIT;
+
+# 回滚到上一次事务开始点
+ROLLBACK;
+```
+
+```sql
+# 带SAVEPOINT: 可以会滚到某个状态
+START TRANSACTION;
+
+INSERT INTO book1 (name) VALUE ('ERICK');
+
+INSERT INTO book1 (name) VALUE ('LUCY');
+
+SAVEPOINT first;
+
+INSERT INTO book1 (name) VALUE ('Nancy');
+
+ROLLBACK TO SAVEPOINT first; # 则'Nancy'不会被添加
+
+COMMIT;
+```
+
+```sql
+START TRANSACTION;
+
+INSERT INTO book1 (name) VALUE ('apple');
+
+INSERT INTO book1 (name) VALUE ('peach');
+
+SAVEPOINT first;
+
+INSERT INTO book1 (name) VALUE ('melon');
+
+RELEASE SAVEPOINT first; #删除某个SAVEPOINT
+
+COMMIT;
+```
+
+### 3. 不受AUTOCOMMIT影响
+
+```SQL
+# 数据定义语言(Data Definition Language) DDL
+- 数据库，表，视图，存储过程等
+- 当使用CREATE, ALTER, DROP 等去修改数据库对象时，就会自动提交当前事务
+
+# 修改mysql库中的信息， 如mysql.user表
+- ALTER USER, CREATE USER, DROP USER, GRANT, RENAME USER, REVOKE, SET PASSWORD等操作
+
+# 事务控制
+BEGIN;
+....
+
+BEGIN; # 又开启了一个事务，则会自动提交上一个事务
+
+# 关于锁定的语句: 自动提交前面语句的事务
+LOCK TABLES, UNLOCK TABLES 
+```
+
+## 隔离级别
+
+```sql
+CREATE TABLE student
+(
+    studentno    INT,
+    name  VARCHAR(20),
+    class VARCHAR(20),
+    PRIMARY KEY (studentno)
+);
+
+INSERT INTO student (studentno, name, class) VALUE (1, 'erick', '一班');
+```
+
+### 1. 并发问题
+
+- 访问相同数据的事务，如果<font color=orange>并发执行</font>，可能会有一些问题
+
+#### 脏写(Dirty Write)
+
+- 对于两个事务Session-A和Session-B，如果B修改了<font color=orange>未提交</font>事务A<font color=orange>修改过</font>的数据，就是脏写
+
+![image-20230807152316885](https://erick-typora-image.oss-cn-shanghai.aliyuncs.com/img/image-20230807152316885.png)
+
+#### 脏读(Dirty Read)
+
+- A读取了已经被B更新，但B还没提交的字段。如果B回滚，A读取的数据就是临时且无效的
+
+![image-20230807152629320](https://erick-typora-image.oss-cn-shanghai.aliyuncs.com/img/image-20230807152629320.png)
+
+#### 不可重复读(Non Repeated Read)
+
+- 事务B中，隐式提交了几次数据，导致事务A中，每次读取的结果都不一样
+
+![image-20230807153729181](https://erick-typora-image.oss-cn-shanghai.aliyuncs.com/img/image-20230807153729181.png)
+
+#### 幻读(Phantom)
+
+- Session-A在一个事务中，读取到了Session-B<font color=orange>新增</font>的数据，也就是<font color=orange>幻影记录</font>
+- 如果B是删除了数据，则不算幻读
+
+![image-20230807153932214](https://erick-typora-image.oss-cn-shanghai.aliyuncs.com/img/image-20230807153932214.png)
+
+### 2. 隔离级别
+
+- 上面四种并发问题严重性：脏写>脏读>不可重复读>幻读
+- 隔离级别越高，并发越低；隔离级别越低，并发越高
+- 四种隔离级别，都能解决脏写的问题，因为脏写不能容忍
+- MySQL默认： REPEATABLE READ
+
+![image-20230807155057395](https://erick-typora-image.oss-cn-shanghai.aliyuncs.com/img/image-20230807155057395.png)
+
+```sql
+# 默认： REPEATABLE-READ
+SHOW VARIABLES LIKE 'transaction_isolation';
+
+# 修改：READ UNCOMMITTED | READ COMMITTED | REPEATABLE READ | SERIALIZABLE
+SET GLOBAL|SESSION TRANSACTION ISOLATION LEVEL READ UNCOMMITTED;
+
+SET GLOBAL|SESSION TRANSACTION_ISOLATION='';
+
+# 修改配置文件
+```
+
+数据准备
+
+```sql
+CREATE TABLE account
+(
+    id      INT,
+    name    VARCHAR(20),
+    balance INT,
+    PRIMARY KEY (id)
+);
+
+INSERT INTO account (id, name, balance)
+VALUES (1, '张三', 100),
+       (2, '李四', 0);
+```
+
+#### READ UNCOMMITTED-脏读
+
+- 会话1还没提交的数据，被会话2读取到了
+
+```SQL
+SET GLOBAL TRANSACTION ISOLATION LEVEL READ UNCOMMITTED;
+```
+
+```sql
+# 会话1
+BEGIN;
+
+UPDATE account
+SET balance=200
+WHERE id = 1;
+
+#  如果rollback了，则会话2读取到了临时且无效的数据
+```
+
+```SQL
+# 会话2： 读取到了balance=200
+SELECT *
+FROM account
+WHERE id = 1;
+```
+
+#### READ COMMITTED-不可重复读
+
+- 能够解决上面脏读
+- 但是会有不可重复读
+
+```SQL
+SET GLOBAL TRANSACTION ISOLATION LEVEL READ COMMITTED;
+```
+
+```sql
+#  会话1: 隐式的提交了几次数据
+UPDATE account
+SET balance=balance - 50
+WHERE id = 1;
+
+
+UPDATE account
+SET balance=balance - 50
+WHERE id = 1;
+```
+
+```SQL
+# 会话2： 在一个会话中，读取的值不同
+BEGIN;
+
+SELECT *
+FROM account
+WHERE id = 1;
+
+SELECT *
+FROM account
+WHERE id = 1;
+```
+
+#### REPEATABLE READ-幻读
+
+- MySQL默认级别
+- 能解决上面的不可重复读的问题
+- 但是存在幻读问题
+
+```sql
+SET GLOBAL TRANSACTION ISOLATION LEVEL REPEATABLE READ;
+```
+
+```SQL
+# 会话1: 先开启
+BEGIN;
+
+# 读取不到，这个时候开启会话2
+SELECT *
+FROM account
+WHERE id = 3;
+
+# 依然读取不到：没读取到
+SELECT *
+FROM account
+WHERE id = 3;
+
+# 用这个可以证明：读取到了
+INSERT INTO account (id, name, balance) VALUE (3, 'lucy', 200);
+
+ROLLBACK ;
+```
+
+```sql
+#  会话2：
+INSERT INTO account (id, name, balance) VALUE (3, 'lucy', 200);
+```
+
+#### SERIALIZABLE
+
+- 通过添加锁的方式，使得多个事务之前，完全是串行执行，并发度较低
+
+# 事务日志
+
+- 事务的隔离型是由<font color=orange>锁机制</font>实现的
+- 事务的原子性，一致性和持久性由事务的redo日志和undo日志来保证
+
+## REDO LOG
+
+- <font color=orange>重做日志</font>：提供再写入操作，恢复提交事务修改的页操作，保证事务的<font color=orange>持久性</font>
+- InnoDB存储引擎是以<font color=orange>页为单位</font>来管理存储空间的。在访问页之前，需要把<font color=orange>磁盘上</font>的页缓存到内存中的<font color=orange>Buffer Pool</font>之后才可以访问。所有的变更都必须<font color=orange>先更新Buffer Pool</font>中的数据，然后Buffer poll中的<font color=orange>脏页</font>会以一定的频率被刷入磁盘<font color=orange>(checkpoint机制)</font>，通过Buffer Poll来优化CPU和磁盘之间的性能差距
+- 是存储引擎层InnoDB生成的日志，记录的是<font color=orange>物理级别</font>上的页修改操作，比如页号xx，偏移量是yyy写入了zzz数据
+
+#### 1. 引入原因
+
+- 一个事务提交后，数据先在Buffer Pool中进行，然后等待checkpoint刷盘完成持久化。
+- checkpoint机制并不是每次更新完后就会立刻刷盘
+- 假如Buffer Poll中已经有数据了，但还未刷盘。此时服务器宕机， 事务已经提交，Buffer Poll中数据丢失，最终没有完成持久化
+
+```bash
+# 暴力解决方案
+- 事务提交完毕后，立刻把该事务所修改的页面刷盘
+
+# 缺点一： 修改量和刷盘量工作比列严重不成比例
+- 仅仅修改了某个页面中的一个字节，刷盘时需要把一个完整的页面从内存中刷新到磁盘中
+- 一个页面是16kb，只修改一个字节就要刷新16kb的数据到磁盘上，性能消耗
+
+# 缺点二：随机IO刷新慢
+- 一个事务可能包含很多个语句，牵涉到修改多个页面
+- 这些页面可能并不相邻，刷盘时候进行随机IO，比顺序IO要慢
+```
+
+#### 2. REDO LOG
+
+- InnoDB引擎事务采用的是<font color=orange>Write Ahead Logging</font>
+- 如：某个事务将某个表中<font color=orange>第10页</font>中偏移量为<font color=orange>100</font>的字节值从<font color=orange>1</font>改为<font color=orange>2</font>，记录一下即可
+- 先写日志，再写磁盘，只有日志写入成功，才算事务提交成功，即redo log
+- 存储表空间ID, 页号，偏移量，以及需要更新的值
+- 如果发生宕机且Buffer Pool数据未刷盘到磁盘时，通过redo log来恢复，保证事务的持久性
+
+```bash
+# 特点
+- 顺序写磁盘的：               在事务过程中，每执行一个sql，就产生若干条redo日志，按照产生的顺序写入磁盘，顺序IO比随机IO快
+- 事务执行过程，redo不断记录：   存储引擎层产生的
+
+# 优点： 
+- redo 日志降低了刷盘频率
+- redo日志占用的空间非常小
+```
+
+#### 3. 组成部分
+
+ 
