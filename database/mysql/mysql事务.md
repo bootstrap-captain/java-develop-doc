@@ -552,3 +552,247 @@ SHOW VARIABLES LIKE 'innodb_log_file_size';
 - 可能发生<font color=orange>脏读</font>，<font color=orange>不可重复读</font>，<font color=orange>幻读</font>
 - 利用加锁或者MVCC来解决
 
+## 2. 锁分类-数据操作
+
+### 2.1 读锁
+
+- Shared Lock,   S锁，针对同一个数据，多个事务的读操作可以同时进行而不互相影响
+
+### 2.2 写锁
+
+- Exclusive Lock，X锁，当前写操作没完成时，阻断其他写锁和读锁
+
+|      | X锁    | S锁    |
+| ---- | ------ | ------ |
+| X锁  | 不兼容 | 不兼容 |
+| S锁  | 不兼容 | 兼容   |
+
+### 锁定读
+
+- 即可加共享锁，也可加排他锁
+
+```sql
+SELECT ... FOR SHARE;               # 共享锁
+SELECT ... LOCK IN SHARE MODE;      # 共享锁
+
+SELECT ... FOR UPDATE;             # 排他锁
+```
+
+```SQL
+# 两个共享锁: 不会阻塞
+
+# 会话一：
+SELECT * FROM account FOR SHARE;
+
+# 会话二：
+SELECT * FROM account FOR SHARE;
+```
+
+```sql
+# 一个共享锁，一个排他锁： 会阻塞
+
+# 会话一：必须事务结束后，会话二才会获取到记录
+BEGIN;
+
+SELECT * FROM account FOR UPDATE;
+
+COMMIT;
+
+# 会话二：
+SELECT * FROM account FOR SHARE;
+```
+
+```sql
+# 两个排他锁： 会阻塞
+# 会话一：必须事务结束后，会话二才会获取到记录
+BEGIN;
+
+SELECT * FROM account FOR UPDATE;
+
+COMMIT;
+
+# 会话二：
+BEGIN;
+
+SELECT * FROM account FOR UPDATE;
+
+COMMIT;
+```
+
+```sql
+# 8.0新特性
+
+# 1. 如果会话中包含一个排他锁，当前会话，超时等待时间
+SHOW VARIABLES LIKE 'innodb_lock_wait_timeout';
+
+# 2. NOWAIT: 如果获取不到锁，则立刻报错返回
+
+# 3. SKIP LOCK： 也会立刻返回，只是返回的结果中不包含被锁定的行
+
+
+# 会话一：
+BEGIN;
+
+SELECT * FROM account FOR UPDATE;
+
+COMMIT;
+
+# 会话二：
+BEGIN;
+
+# [HY000][3572] Statement aborted because lock(s) could not be acquired immediately and NOWAIT is set.
+SELECT * FROM account FOR UPDATE NOWAIT;
+
+COMMIT;
+```
+
+## 3. 锁分类-粒度
+
+- 为了尽可能提高数据库的并发度，每次锁定的数据范围越小越好
+- 理论上，每次只操作当前操作的数据的方案能得到最大的并发度，但是管理锁是很耗资源的事情(涉及获取，检查，释放等动作)
+- 数据库系统需要在<font color=orange>并发性能</font>和<font color=orange>系统性能</font>两方面进行平衡
+
+### 3.1 表锁
+
+#### 表锁
+
+- 锁定整个表，是MySQL中最基本的锁策略，<font color=orange>不依赖与存储引擎</font>，表锁是<font color=orange>开销最小</font>的策略，粒度最大
+- 表级锁一次会将整个表锁定，所以可以很好的<font color=orange>避免死锁</font>，但是<font color=orange>并发性低</font>
+- 一般不建议对InnoDB添加表锁，因为InnoDB支持行锁
+
+```sql
+# 以MyISAM为例，当然InnoDB也是可以的
+CREATE TABLE dog
+(
+    id   INT,
+    name VARCHAR(20),
+    PRIMARY KEY (id)
+) ENGINE = MyISAM;
+
+# 查看当前都有哪些表带锁
+SHOW OPEN TABLES WHERE in_use>0;
+```
+
+```sql
+# 基本语法
+LOCK TABLES dog READ;        # 加读锁
+LOCK TABLES dog WRITE;       # 加写锁
+
+UNLOCK TABLES;               # 释放锁，不用指定哪个表
+```
+
+| 锁类型 | 当前会话可读 | 当前会话可写 | 当前会话可操作其他表 | 其他会话可读 | 其他会话可写 |
+| ------ | ------------ | ------------ | -------------------- | ------------ | ------------ |
+| 读锁   | Y            | N            | N                    | Y            | N，等        |
+| 写锁   | Y            | Y            | N                    | N，等        | N，等        |
+
+#### 意向锁
+
+- InnoDB支持<font color=orange>多粒度锁</font>，允许<font color=orange>行级锁和表级锁共存</font>
+
+```bash
+# 解决的问题： 一个事务要加表级锁时，需要全部遍历所有记录，确保每一行都没有锁
+- 事务t1对A-表中某个行加上了锁
+- 事务t2要对A-表中添加 表级别 的x锁或s锁，首先要确定该表上是否有其他锁(表锁/行锁)
+- 事务t2必须遍历A-表中所有行，才能确保是否有锁，比较耗费性能
+```
+
+- 事务给某一行数据加上了<font color=orange>排他锁</font>，数据库会<font color=orange>自动</font>给更大一级的空间，比如数据页或数据表加上<font color=orange>意向锁</font>(锁标识)，告诉其他事务这个数据页或数据表已经有其他人上过排他锁了
+- 由InnoDB存储引擎<font color=orange>自己维护的</font>，在为数据行加共享/排他锁之前，会先在表级别添加意向锁
+
+```sql
+CREATE TABLE dog
+(
+    id   INT,
+    name VARCHAR(20),
+    PRIMARY KEY (id)
+);
+
+# 会话一: 为某个行加锁， 则存储引擎会自动给该表加上一个意向排他锁
+# 只有commit后，x锁才会释放，会话二才会开始执行
+BEGIN;
+
+SELECT *
+FROM dog
+WHERE id = 1 FOR
+UPDATE;
+
+COMMIT;
+
+# 会话二：锁定某个表
+LOCK TABLES dog READ;
+```
+
+|        | 意向共享锁IS | 意向排他锁IX |
+| ------ | ------------ | ------------ |
+| 共享锁 | 兼容         | 互斥         |
+| 排他锁 | 互斥         | 互斥         |
+
+- 意向锁之间是互相兼容的，因为只是一个锁标识，多个行记录，可能都会添加对应的意向锁标识
+
+|              | 意向共享锁IS | 意向排他锁IX |
+| ------------ | ------------ | ------------ |
+| 意向共享锁IS | 兼容         | 兼容         |
+| 意向排他锁IX | 兼容         | 兼容         |
+
+#### 元数据锁
+
+- meta data lock: MDL锁，保证读写的正确性
+- <font color=orange>当对一个表做写操作时，加DML读锁；当对表结构变更操作时，加DML写锁</font>
+- 不需要显示使用，在访问一个表的时候会被自动加上
+- 多个读锁之间不互斥，读写锁之间，写锁之间是互斥的
+
+### 3.2 行锁
+
+- InnoDB支持，MyISAM不支持
+- 优点：锁粒度小，发生锁冲突概率低，并发度高
+- 缺点：锁开销比较大，容易出现死锁
+
+#### 记录锁
+
+- 当一个事务获取了一条记录的s锁时，其他事务可以继续获取该记录的s锁，但不可以继续获取该记录的x记录锁
+- 当一个事务获取了一条记录的x锁时，其他事务不能获取该记录的x和s锁
+
+#### 间隙锁
+
+- Gap Locks
+- MySQL在REPETATED READ下，是可以解决幻读问题
+- 间隙锁仅仅是为了防止插入幻影记录而提出来的
+
+```sql
+# 数据多行假如为1，3，6，9，10的主键
+
+# 事务一：
+可以为主键为5的(数据不存在)，加一个间隙锁
+ SELECT * FROM table WHERE id=14 LOCK IN SHARE MODE;       # 会把10～正无穷的记录锁住，不允许其他事务插入
+```
+
+#### 临键锁
+
+- Next-Key Locks：LOCK_ORDINARY，是记录锁和间隙锁的合体
+- 既想锁住某条记录，又想阻止其他事务在该记录前边的间隙插入新记录
+
+#### 插入意向锁
+
+- Insert Intention Locks
+
+### 3.3 页锁
+
+- 在页的粒度上进行锁定
+- 页锁的开销介于表锁和行锁之间，会出现死锁
+- 每个层级的锁数量是有限制的，当某个层级的锁数量超过了阈值，就会进行锁升级
+
+## 4. 锁分类-态度
+
+### 4.1 乐观锁
+
+```sql
+
+```
+
+### 4.2 悲观锁
+
+```sql
+SELECT ... FOR UPDATE;
+```
+
