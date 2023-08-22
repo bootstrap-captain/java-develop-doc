@@ -2,77 +2,67 @@
 
 ## 1. 基本概念
 
-### 1.1 数据库
-
-- **持久化(Persistence)**: 把数据保存到可掉电式存储设备中，将内存中数据保存到硬盘上固化
-- **持久化介质**：关系型数据库，非关系性数据库，磁盘文件，XML文件
-
-### 1.2 术语
-
-- **DB**:      Database, 数据结构化存储仓库，保存数据
-- **DBMS**:    Database Management System，数据库管理系统。  类似 txt文件 和notepad软件
-- **RDBMS**：  Relational Database Management System，关系型数据管理系统
-- **SQL**：    Structured Query Language, 结构化查询语言, 用来和数据库通讯
-
-### 1.3 RDBMS/非RDBMS
-
-####  RDBMS
-
-- 数据结构归结为二维表格形式
-- 包含Database, Table, Row, Column
-- 不同Table对应实体，并且不同Table可以进行联查(**关系模型** )
-- 支持**复杂查询，事务**
-
-#### 非RDBMS
-
-- 可以看成RDBMS的精简版，基于k-v存储数据，不需要经过SQL层的解析，性能高
+- <font color=orange>持久化(Persistence)：</font>把数据保存到可掉电式存储设备中，将内存中数据固化到硬盘上
+- <font color=orange>持久化介质：</font>关系型数据库，非关系性数据库，磁盘文件，XML文件
+- <font color=orange>DB：</font>Database, 数据结构化存储仓库，保存数据
+- <font color=orange>DBMS：</font>Database Management System，数据库管理系统。（txt文件-notepad软件）
+- <font color=orange>RDBMS：</font>Relational Database Management System，关系型数据管理系统
+- <font color=orange>SQL：</font>Structured Query Language, 结构化查询语言, 用来和数据库通信
 
 ```bash
-# 不能通过类似mysql的where来进行过滤
-- k-v类型数据库(Redis),
-- 文档类型数据库(mongodb, aws dynomoDB), 存储xml或json
-- 图形类型数据库
+# RDBMS
+- 数据结构归结为二维表格形式
+- 包含Database, Table, Row, Column
+- 不同Table对应实体，并且不同Table可以进行联查(关系模型)
+- 支持复杂查询，事务
+
+# 非RDBMS
+- 可以看成RDBMS的精简版，基于k-v存储数据，不需要经过SQL层的解析，性能高
+- 不能通过类似mysql的where来进行过滤
+- k-v类型数据库:  Redis
+- 文档类型数据库:  mongodb, aws dynomoDB, 存储xml或json
+- 图形类型数据库: 
+- 搜索引擎数据库： es
 ```
 
 ## 2. SQL
 
-- Structured Query Language: 使用滚戏模型的数据库应用语言，与数据库直接交互
-- 美国国家标准局(ANSI)制定，其中SQL92和SQL99影响深远
+- Structured Query Language: 使用关系型模型的数据库应用语言，与数据库直接交互
+- 美国国家标准局(ANSI)制定，其中<font color=orange>SQL92</font>和<font color=orange>SQL99</font>影响深远
 - SQL类似普通话，不同的数据库厂商类似各地方言
 
 ### 2.1 分类
 
 ```bash
-DDL
-- Data Definition Languages, 数据定义语言
+# DDL: Data Definition Languages
+- 数据定义语言
 - CREATE   ALTER   DROP   RENAME  TRUNCATE
 - 定义不同的库，表，视图，索引等数据库对象
 
-DML
-- Data Manipulation Language，数据操作语言
-- INSERT   DELETE   UPDATE  SELECT
+# DML:Data Manipulation Language
+- 数据操作语言
+- INSERT   DELETE   UPDATE  SELECT(重要)
 - 添加，删除，更新，查询数据库记录
 - SELECT 是SQL的基础，最为重要
 
-DCL
-- Data Control Language, 数据控制语言
+# DCL: Data Control Language
+- 数据控制语言
 - GRANT,  REVOKE, COMMIT, ROLLBACK,  SAVEPOINT
 - 定义库，表，字段，用户的访问权限和安全级别
 ```
 
 ### 2.2 规则
 
-- SQL结束用 ； 同一个SQL必要时候可以换行
+- SQL结束用 ；， 同一个SQL必要时候可以换行
 - 同一行输入多条指令，用  ； 隔开即可，多条sql可以一起执行
-- \G 作为sql语句结束符，也可以使用 \G来结束，查询结果垂直显示
-- \c : 输入前面的较长的sql，如果不想执行了，则 \c 来取消当前sql的执行
-- 不区分大小写，为方便调试，关键字使用大写，库名，表名，字段名使用小写
 
 ```sql
+# \G 作为sql语句结束符，也可以使用 \G来结束，查询结果垂直显示
 --  如果输入的语句比较短，则 \G没有什么意义，如果较长，则方便查看；
 --   只在mysql自带的cli中生效
 SELECT user(),now(),version()\G
 
+# \c : 输入前面的较长的sql，如果不想执行了，则 \c 来取消当前sql的执行
 SELECT now(),version(),user()\c
 
 SELECT now();SELECT version();SELECT user();
@@ -412,25 +402,27 @@ UPDATE cnip SET name = NULL where id = 4;
 -- 1. 基本使用
 SELECT * FROM cnip; 
 SELECT name,age FROM cnip;
-SELECT 100;  SELECT 'mick';   -- 常量,可以给每行添加一个对应的字段    
-SELECT (2+2); -- 表达式
-SELECT 1+1 FROM dual; -- 伪表
-SELECT VERSION(); -- 函数
+SELECT 100;  SELECT 'mick';                         -- 常量,可以给每行添加一个对应的字段    
+SELECT (2+2);                                       -- 表达式
+SELECT 1+1 FROM DUAL;                               -- 伪表
+SELECT VERSION();                                   -- 函数
 SELECT * FROM cnip_db.cnip WHERE cnip.name = '李明'; -- 全限定表名，列名
 
 
--- 2.别名：改变结果集中字段显示名称；    多表联查，重复字段进行区分
-SELECT VERSION() AS version;    -- 建议加AS
-SELECT VERSION() version;       -- 可以不写
-SELECT VERSION() 'my version';  -- 别名中存在空格，用‘’或“”
+-- 2.别名：
+-- 改变结果集中字段显示名称；    多表联查，重复字段进行区分
+SELECT VERSION() AS version;              -- 建议加AS
+SELECT VERSION() version;                 -- 可以不写
+SELECT VERSION() 'my version';            -- 别名中存在空格，用或“”
 
 
 -- 3. 去重：select后单独使用
-SELECT DISTINCT name FROM phone;   -- 获取不重复的某个字段的value
-SELECT DISTINCT name,age FROM cnip; -- 用于后面多列，即行中name和age都重复了，才去重
+SELECT DISTINCT name FROM phone;           -- 获取不重复的某个字段的value
+SELECT DISTINCT name,age FROM cnip;        -- 用于后面多列，即行中name和age都重复了，才去重
+# SELECT name,DISTINCT age FROM cnip;        -- error：因为表中数据对不上了
 
 
--- 4. 拼接： 不能用 + ， sql中 + 只能当作运算符
+-- 4. 拼接： 不能用 + ，     sql中 + 只能当作运算符
 SELECT CONCAT('姓名:',first_name,'---',last_name) AS name FROM president;
 
 -- 5. 着重号： 如果表，字段名和mysql关键字重复了，可以使用着重号
@@ -440,18 +432,11 @@ SELECT `order` FROM people;
 #### 1.2. 计算运算符
 
 ```sql
--- 1. 算数运算符：
--- +  -  *  /(DIV)  %(MOD)
+--       +  -  *  /(DIV)  %(MOD)
 SELECT 100 + 99;
-SELECT '100' + 99;  -- 尝试将字符转换为数字并做运算，如果转换不成功则将字符视为0
+SELECT '100' + 99;  -- 隐式转换：尝试将字符转换为数字并做运算，如果转换不成功则将字符视为0
 SELECT 'dfa' + 99;
 SELECT 100 DIV 20;   -- 5
-
--- 2. null参与运算：  null不等同于0，‘’，‘null’
-SELECT null + 10;   --只要其中一个为null，则结果为null
-
--- 可以通过流程函数来控制: 如果为null，则转换为0
-SELECT IFNULL(salary,0) * 10
 ```
 
 ### 2. 比较运算符
@@ -459,63 +444,78 @@ SELECT IFNULL(salary,0) * 10
 #### 2.1 基本比较
 
 ```sql
--- 1. = 返回的是0或者1     {！=,   < ,   >,    <=,   >= } 
--- 字符串参与比较运算，隐式转换，转换不成功则看作0
-SELECT 1 = 1, 1 = 2, 1 = '1', 1 = 'a', 0 = 'a';
+##  = 返回的是0或者1     {！=,   < ,   >,    <=,   >= } 
+
+-- 两边都是数字，则比较大小，
+SELECT 1 = 1, 1 = 2；
+
+-- 一个数字，一个字符串：字符串隐式转换，转换不成功则字符串看作0
+SELECT 1 = '1', 1 = 'a', 0 = 'a';    # 1,0,1
 
 -- 两边都是字符串，则按照ANSI的比较规则
 SELECT 'A' = 'A', 'Ab' = 'AB', 'a' = 'b'; -- 1 1 0
+```
 
--- 只要有NULL参与运算，则结果都是null, 而不是0或1
-SELECT 1 = NULL, NULL = NULL;
-SELECT * FROM cnip WHERE name=null; -- 不会返回一条记录
+#### 2.2 NULL值
 
+```sql
+-- 1. 只要有NULL参与运算，则结果都是null
+SELECT 1 = NULL, NULL = NULL, 12*NULL;
+SELECT * FROM cnip WHERE name=null;             # 不会返回一条记录, 因为只返回比较结果为1的数据
 
 
 -- 2. <=>:  安全等于，null不参与时和=没区别， 为null而生
 -- 两边都是null时为1，只有一个null时为0
 SELECT NULL <=> NULL, 1 <=> NULL;
-SELECT * FROM cnip WHERE name<=>NULL; -- 会返回对应name为null的记录
-```
+SELECT * FROM cnip WHERE name<=>NULL;           -- 会返回对应name为null的记录
 
-#### 2.2 高级比较
 
-```sql
--- 1. 非空判断
+-- 3. 非空判断
 -- IS NULL         IS NOT NULL      和<=>相同
 SELECT * FROM phone WHERE name IS NULL;
 SELECT * FROM phone WHERE name IS NOT NULL;
 
 
--- 2. 按照字典来比较
+-- ***** null参与运算：  null不等同于0，‘’，‘null’
+SELECT null + 10;   --只要其中一个为null，则结果为null
+
+-- 可以通过流程函数来控制: 如果为null，则转换为0
+SELECT IFNULL(salary,0) * 10
+```
+
+#### 2.3 高级比较
+
+```sql
+-- 匹配时： 字符的一定要用‘’,     数值类型，不用
+
+-- 1. 按照字典来比较
 -- LEAST()     GREATEST()   
 SELECT LEAST('A', 'B', 'F', 'Z', 'G');
 SELECT GREATEST('A', 'B', 'F', 'Z', 'G');
-SELECT LEAST('erick', 'edjk', 'adf'); -- 首先按照第一个字母比较，以此类推
-SELECT LEAST(LENGTH('erick'), LENGTH('dfg'), LENGTH('dgadfaf')); -- 比较长度
+SELECT LEAST('erick', 'edjk', 'adf');                              -- 首先按照第一个字母比较，以此类推
+SELECT LEAST(LENGTH('erick'), LENGTH('dfg'), LENGTH('dgadfaf'));   -- 比较长度
 
 
--- 3. 范围查找
+-- 2. 范围查找
 -- BETWEEN(下限) AND(上限)      NOT BETWEEN AND
-SELECT * FROM phone WHERE age BETWEEN 20 and 100; --  包含临界值
+SELECT * FROM phone WHERE age BETWEEN 20 and 100;        --  包含临界值
 SELECT * FROM phone WHERE age NOT BETWEEN 32 AND 100;
 
 
--- 4. 离散查找
+-- 3. 离散查找
 -- IN     NOT IN
 SELECT * FROM phone WHERE name in ('tony','jack','lucy');
 
 
--- 5. 模糊查询
+-- 4. 模糊查询
 -- % 代表0-n个字符，  - 只匹配一个字符；
--- 匹配时： 字符的一定要用‘’,     数值类型，可用可不用''
 -- 不能匹配null值
 -- 英文匹配时候不区分大小写；
 SELECT * FROM cnip WHERE content LIKE '%zte%';
 SELECT * FROM cnip WHERE content LIKE 'z%e';
 SELECT * FROM cnip WHERE content LIKE '_te';
 SELECT * FROM cnip WHERE content LIKE '__te';
-SELECT * FROM phone WHERE  name like '%\_%';   -- 转义符号   \
+SELECT * FROM phone WHERE  name like '%\_%';   -- 转义符号   \  查询包含 _ 的 字符
 SELECT * FROM phone WHERE name like '%^_%' ESCAPE '^';   -- 自定义转义符号为 ^
 ```
 
@@ -523,25 +523,15 @@ SELECT * FROM phone WHERE name like '%^_%' ESCAPE '^';   -- 自定义转义符�
 
 ```sql
 -- 逻辑运算符
--- OR ｜｜     AND &&    NOT!
+--   OR ｜｜     AND &&      NOT !
 SELECT * FROM people WHERE name = 'erick' || name = 'eri';
 SELECT * FROM people WHERE name = 'erick' AND name = 'eri';
+SELECT * FROM book1 WHERE NOT id=1;
 ```
 
-### 4. 分页/排序
+### 4. 排序
 
 ```sql
--- 1. 分页： 语法最后，执行顺序最后
--- 查前五条数据
-SELECT * FROM cnip LIMIT 5;
--- 跳过前面5个，检索2个
-SELECT * FROM cnip LIMIT 5,2;
--- 跳过前面5个，检索2个
-SELECT * FROM cnip LIMIT 2 OFFSET 5;
-
-
-
--- 2. 排序
 -- 默认升序/ASC   DESC/降序
 SELECT * FROM people ORDER BY name DESC;
 
@@ -555,6 +545,20 @@ SELECT * FROM president ORDER BY first_name DESC, last_name DESC;
 -- IF(ccondtion,0,1): true则为0，false 则为1, 三元表达式
 SELECT * FROM president ORDER BY IF(address IS NULL,0,1) DESC, address DESC;
 ```
+
+### 5.  分页
+
+```sql
+-- 1. 分页： 语法最后，执行顺序最后
+-- 查前五条数据
+SELECT * FROM cnip LIMIT 5;
+-- 跳过前面5个，检索2个
+SELECT * FROM cnip LIMIT 5,2;
+-- 跳过前面5个，检索2个
+SELECT * FROM cnip LIMIT 2 OFFSET 5;
+```
+
+
 
 ## 多表联查
 
