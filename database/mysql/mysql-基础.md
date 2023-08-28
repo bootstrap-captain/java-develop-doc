@@ -388,15 +388,11 @@ UPDATE cnip SET name = 'sz', color = 'red' WHERE id = 4;
 UPDATE cnip SET name = NULL where id = 4;
 ```
 
+# 单表查询
 
+## 1.基本查询
 
-# 查询
-
-## 单表查询
-
-### 1.基本查询
-
-#### 1.1 基本/别名/去重/拼接/着重号
+### 1.1 基本/别名/去重/拼接/着重号/合并
 
 ```sql
 -- 1. 基本使用
@@ -415,6 +411,10 @@ SELECT VERSION() AS version;              -- 建议加AS
 SELECT VERSION() version;                 -- 可以不写
 SELECT VERSION() 'my version';            -- 别名中存在空格，用或“”
 
+-- 列的别名，只能在order by后使用
+SELECT *, salary * 10 AS allsalary FROM book1 ORDER BY allsalary;  # 正常
+SELECT *, salary * 10 AS allsalary FROM book1 WHERE allsalary > 10;      # 报错
+
 
 -- 3. 去重：select后单独使用
 SELECT DISTINCT name FROM phone;           -- 获取不重复的某个字段的value
@@ -427,9 +427,18 @@ SELECT CONCAT('姓名:',first_name,'---',last_name) AS name FROM president;
 
 -- 5. 着重号： 如果表，字段名和mysql关键字重复了，可以使用着重号
 SELECT `order` FROM people;
+
+-- 6. UNION   UNION ALL
+-- UNION 会进行去重， 但是去重操作会耗费时间
+-- UNION ALL: 存在重复的数据，但效率高，推荐
+SELECT * FROM cnip where name='erick'
+
+UNION
+
+SELECT * FROM cnip where name='tom';
 ```
 
-#### 1.2. 计算运算符
+### 1.2. 计算运算符
 
 ```sql
 --       +  -  *  /(DIV)  %(MOD)
@@ -439,9 +448,9 @@ SELECT 'dfa' + 99;
 SELECT 100 DIV 20;   -- 5
 ```
 
-### 2. 比较运算符
+## 2. 比较运算符
 
-#### 2.1 基本比较
+### 2.1 基本比较
 
 ```sql
 ##  = 返回的是0或者1     {！=,   < ,   >,    <=,   >= } 
@@ -456,7 +465,7 @@ SELECT 1 = '1', 1 = 'a', 0 = 'a';    # 1,0,1
 SELECT 'A' = 'A', 'Ab' = 'AB', 'a' = 'b'; -- 1 1 0
 ```
 
-#### 2.2 NULL值
+### 2.2 NULL值
 
 ```sql
 -- 1. 只要有NULL参与运算，则结果都是null
@@ -483,7 +492,7 @@ SELECT null + 10;   --只要其中一个为null，则结果为null
 SELECT IFNULL(salary,0) * 10
 ```
 
-#### 2.3 高级比较
+### 2.3 高级比较
 
 ```sql
 -- 匹配时： 字符的一定要用‘’,     数值类型，不用
@@ -519,7 +528,7 @@ SELECT * FROM phone WHERE  name like '%\_%';   -- 转义符号   \  查询包含
 SELECT * FROM phone WHERE name like '%^_%' ESCAPE '^';   -- 自定义转义符号为 ^
 ```
 
-### 3. 逻辑运算符
+## 3. 逻辑运算符
 
 ```sql
 -- 逻辑运算符
@@ -529,63 +538,58 @@ SELECT * FROM people WHERE name = 'erick' AND name = 'eri';
 SELECT * FROM book1 WHERE NOT id=1;
 ```
 
-### 4. 排序
+## 4. 排序
 
 ```sql
+# 不显示指定时，按照数据添加顺序
+SELECT * FROM people;
+	
 -- 默认升序/ASC   DESC/降序
 SELECT * FROM people ORDER BY name DESC;
-
--- order by 后 <支持别名>
-SELECT *, name AS 'MYNAME' FROM people ORDER BY MYNAME;
 
 -- 多字段(二级排序)： 先按第一个字段排序，第一个字段相同再按第二个排序
 SELECT * FROM president ORDER BY first_name DESC, last_name DESC;
 
--- 区分null值的排序： 先按照null和非null排序，再按照字段排序
--- IF(ccondtion,0,1): true则为0，false 则为1, 三元表达式
+-- 区分null值的排序： 某个字段含null值的排序
+-- 先按照该字段的null和非null排序，再按照字段具体内容排序
 SELECT * FROM president ORDER BY IF(address IS NULL,0,1) DESC, address DESC;
 ```
 
-### 5.  分页
+## 5.  分页
 
 ```sql
--- 1. 分页： 语法最后，执行顺序最后
--- 查前五条数据
-SELECT * FROM cnip LIMIT 5;
+-- 前10条
+SELECT * FROM cnip LIMIT 10;
+
+-- 跳过前面5个，检索10个
+SELECT * FROM cnip LIMIT 5,10;
+
 -- 跳过前面5个，检索2个
-SELECT * FROM cnip LIMIT 5,2;
--- 跳过前面5个，检索2个
-SELECT * FROM cnip LIMIT 2 OFFSET 5;
+SELECT * FROM cnip LIMIT 10 OFFSET 5;
 ```
 
+# 多表联查
 
+## 1. 笛卡尔积
 
-## 多表联查
-
-### 1 笛卡尔积
-
-- 假如存在两个集合X, Y,  笛卡尔积就是X和Y的全排列组合
-- CROSS JOIN,  INNER JOIN, JOIN
-- A表包含n条数据，B表包含m条数据，则笛卡尔积为n*m条数据；
+- 两个集合X和Y的全排列组合
+- A表包含n条数据，B表包含m条数据，则笛卡尔积为n*m条数据
 
 ```sql
--- 表别名区分不同表的相同字段，起别名后字段必须用别名的字段
--- 出现笛卡尔积错误的几种方式
--- 如果要避免笛卡尔积错误，那么需要加上链接条件
-SELECT * FROM people,phone;
-SELECT * FROM people CROSS JOIN phone;
-SELECT * FROM people INNER JOIN phone;
-SELECT * FROM people JOIN phone;
+SELECT * FROM people,phone;                     # A,B
+SELECT * FROM people CROSS JOIN phone;          # A CROSS JOIN B
+SELECT * FROM people INNER JOIN phone;          # A INNER JOIN B
+SELECT * FROM people JOIN phone;                # A JOIN B
 
--- 加上别名：避免不同表字段重复，同时sql优化提升效率
+-- 加上表别名：表中的字段加上表别名，避免不同表字段重复，同时sql优化提升效率
 SELECT peo.name,peo.`order`, pho.name FROM people AS peo,phone AS pho;
 ```
 
-### 2. 连接条件
+## 2. 连接条件
 
 - 两个表在笛卡尔积的条件上，增加一个条件
 
-#### 2.1 等值链接/非等值链接
+### 2.1 等值链接/非等值链接
 
 ```sql
 -- 1 等值链接，  笛卡尔积的各种join都适用
@@ -599,7 +603,7 @@ WHERE emp.salary > sal.low_level
   AND emp.salary < sal.high_level;
 ```
 
-#### 2.2 自链接/非自链接
+### 2.2 自链接/非自链接
 
 ```sql
 -- 1. 自链接
@@ -607,66 +611,67 @@ SELECT emp.employ_id, emp.first_name, manage.employ_id, manage.first_name
 FROM employee AS emp,
      employee AS manage
 WHERE emp.manager_id = manage.employ_id;
+
+-- 2. 非自链接
 ```
 
-### 3. 内连接/外连接
+## 3. 内连接/外连接
 
 - SQL99 标准
 - 采用(A表)   JOIN (B表)  ON 
 
-#### 3.1 内连接
+### 3.1 内连接
 
 - 合并具有同一列的两个以上的表的行，结果集中不包含一个表与另一个表不匹配的行
 - 笛卡尔积加上对应的条件过滤得到的数据
 
 ```sql
--- (A表) JOIN (B表)  ON 
--- JOIN,  INNER JOIN, 其中Inner可以省略 
+# 条件过滤
+-- sql 92标准：  where
+SELECT * FROM student stu,president pre WHERE stu.id = pre.id;
+
+-- sql 99标准：   on
 SELECT * FROM employee JOIN salary_level ON employ_id=salary_level.high_level;
 SELECT * FROM employee INNER JOIN salary_level ON employ_id=salary_level.high_level;
 ```
 
-#### 3.2 外连接
+### 3.2 外连接
 
 - 除了应该有的结果集，还包含不匹配的比如null的结果集
+- 一般情况下，考虑到连接部分的字段可能为null，因此查询所有的记录时，就应该直接使用外连接
+- <font color=orange>sql92不支持外连接，sql99支持</font>
 
-#### 3.3 LEFT JOIN
+#### LEFT OUTER JOIN
 
-- 在笛卡尔积的基础上，进行on条件的筛选
+- 在笛卡尔积的基础上，进行条件过滤后
 - 再加上左表中剩下的数据，右边数据用null表示
 
-
-
 ```sql
--- (A表) LEFT OUTTER JOIN (B表)  ON 
+-- A LEFT OUTTER JOIN B           A LEFT JOIN B
 -- OUTTER可以省略
 SELECT * FROM student stu LEFT JOIN president pre on stu.id = pre.id;
 SELECT * FROM student stu LEFT OUTTER JOIN president pre on stu.id = pre.id;
 ```
 
-
-
 ![img](https://img-blog.csdnimg.cn/20200816173507406.jpg?x-oss-process=image/watermark,type_ZmFuZ3poZW5naGVpdGk,shadow_10,text_aHR0cHM6Ly9ibG9nLmNzZG4ubmV0L3dlaXhpbl80MzM3NDU3OA==,size_16,color_FFFFFF,t_70#pic_center)
 
-#### 3.4 RIGHT JOIN
-
-
+#### RIGHT OUTER JOIN
 
 ```sql
+-- A RIGHT OUTTER JOIN B           A RIGHT JOIN B
 -- OUTTER可以省略
 SELECT * FROM student stu RIGHT JOIN president pre on stu.id = pre.id;
 SELECT * FROM student stu RIGHT OUTTER JOIN president pre on stu.id = pre.id
 ```
 
-
-
 ![img](https://img-blog.csdnimg.cn/20200816173812906.jpg?x-oss-process=image/watermark,type_ZmFuZ3poZW5naGVpdGk,shadow_10,text_aHR0cHM6Ly9ibG9nLmNzZG4ubmV0L3dlaXhpbl80MzM3NDU3OA==,size_16,color_FFFFFF,t_70#pic_center)
 
-#### 3.5 OUTER JOIN
+#### FULL OUTER JOIN
 
 - 满外链接
 - 再加上左表中剩下的数据，右边数据用null表示
 - 再加上右表中剩下的数据，左边数据用null表示 
+- mysql不支持这种写法，但是可以通过UNION来实现
 
 ```sql
 SELECT * FROM student stu LEFT JOIN president pre on stu.id = pre.id
@@ -674,11 +679,6 @@ SELECT * FROM student stu LEFT JOIN president pre on stu.id = pre.id
 UNION
 
 SELECT * FROM student stu RIGHT JOIN president pre on stu.id = pre.id;
-
-
--- UNION   UNION ALL
--- UNION 会进行去重， 但是去重操作会耗费时间
--- UNION ALL: 存在重复的数据， 一般尽可能的去用，效率高
 ```
 
 ![img](https://img-blog.csdnimg.cn/20200816174323369.jpg?x-oss-process=image/watermark,type_ZmFuZ3poZW5naGVpdGk,shadow_10,text_aHR0cHM6Ly9ibG9nLmNzZG4ubmV0L3dlaXhpbl80MzM3NDU3OA==,size_16,color_FFFFFF,t_70#pic_center)
@@ -694,7 +694,7 @@ SELECT * FROM student stu RIGHT JOIN president pre USING(id);
 
 ### 4.2  NATURAL
 
-- 自动查询两个表中**所有相同**的字端，然后进行等值连接
+- 查询两个表中**所有相同**的字段，然后进行等值连接
 - 两个表中只有一列的表字段相同，则用NATURAL  JOIN简化sql
 - 相同的列只会展示一个
 
@@ -748,61 +748,61 @@ WHERE salary < ALL (SELECT salary FROM employee WHERE address = '上海');
 
 # 函数
 
-## 1. 简单函数
+## 1. 数值函数
 
-### 1.1 数值函数
+| 函数                    | DESC                                                         |
+| ----------------------- | ------------------------------------------------------------ |
+| ABS(1)                  | 绝对值                                                       |
+| SIGN(X)                 | 返回x的符号，正数返回1，负数返回-1，0返回0                   |
+| PI()                    | 圆周率                                                       |
+| CEIL(1.5)  CEILING(1.5) | 向上取整  >= 该参数的最小整数                                |
+| FLOOR(1.5)              | 向下取整                                                     |
+| LEAST(e1,e2,e3)         | 返回最小的                                                   |
+| GREATEST(e1,e2,e3)      | 返回最大的                                                   |
+| MOD(x,y)                | 返回x除以y后的余数                                           |
+| RAND()                  | 0-1 的随机数,可以乘法的到对应的值                            |
+| RAND(X)                 | 0-1 的随机数，如果X因子一样，产生的随机数相同(伪随机，可以以时间戳为种子) |
+| ROUND(1.5)              | 四舍五入                                                     |
+| ROUND(5.32, 1)          | 四舍五入，保留1位小数 5.3                                    |
+| TRUNCATE(1.345,2)       | 取小数点后几位  1.34                                         |
+| SQRT(2)                 | 返回平方根，x值为负，返回NULL                                |
+
+## 2. 字符串函数
+
+| 函数                               | DESC                                |
+| ---------------------------------- | ----------------------------------- |
+| LENGTH(name)                       | 字节长度                            |
+| CONCAT(name,'====',brand)          | 字符拼接                            |
+| CONCAT_WS('--','beijing','shanxi') | 指定拼接符号拼接                    |
+| REPLACE('aaaa','a','bv')           | 用bv替换a                           |
+| UPPER(name)                        | 大写转换                            |
+| LOWER(name)                        | 小写转换                            |
+| LEFT(str,3)， RIGHT(str,2)         | 取字符串左边3个, 最多取当前完整字符 |
+| TRIM()   LTRIM().  RTRIM()         | 去除空格                            |
 
 ```sql
-SELECT ABS(1)               -- 绝对值
-CEIL(1.5)  CEILING(1.5)     -- 向上取整  >= 该参数的最小整数
-FLOOR(1.5)                  -- 向下取整
-PI()                        -- 圆周率的值
-RAND()                      -- 0-1 的随机数,可以乘法的到对应的值
-RAND(X)                     -- 0-1 的随机数，如果X因子一样，产生的随机数相同
-ROUND(1.5)                  -- 四舍五入
-ROUND(5.32, 1)              -- 四舍五入，保留1位小数 5.3
-TRUNCATE(1.345,2);          -- 取小数点后几位  1.34
-SQRT(2)                     -- 返回平方根，x值为负，返回NULL
-LEAST(e1,e2,e3)             -- 返回最小的
-GREATEST(e1,e2,e3)          -- 返回最大的
-```
-
-### 1.2 字符串函数
-
-```sql
-SELECT LENGTH(name) from phone;                 -- 字符长度
-SELECT CONCAT(name,'====',brand) from phone;    -- 字符拼接
-SELECT UPPER(name) from phone;                  -- 大写转换
-SELECT LOWER(name) from phone;                  -- 小写转换
 SELECT CONCAT( LOWER(name), '===',UPPER(brand)) from phone; -- 函数嵌套
-
-SELECT TRIM('   LUCY     ') as result;   -- TRIM()   LTRIM().  RTRIM()
+SELECT LENGTH('hello'),LENGTH('我们') FROM DUAL;             -- 5, 6, utf8中，1个英文1个字节，1个汉字3个字节
+SELECT CONCAT_WS('--','beijing','shanxi') FROM dual;        -- beijing--shanxi
 ```
 
-## 2. 日期函数
+## 3. 日期函数
 
-### 2.1 基本类型
+### 3.1 简单日期
+
+| 函数                                                         | Value               | DESC         |
+| ------------------------------------------------------------ | ------------------- | ------------ |
+| CURDATE()   /   CURRENT_DATE()                               | 2023-08-28          |              |
+| CURTIME()   /   CURRENT_TIME()                               | 16:50:01            |              |
+| NOW() / SYSDATE() /  CURRENT_TIMESTAMP() /  LOCALTIME() / LOCALTIMESTAMP() | 2023-08-28 16:52:02 |              |
+| UTC_DATE()                                                   | 2023-08-28          | 世界标准时间 |
+| UTC_TIME()                                                   | 09:36:29            |              |
+| UTC_TIMESTAMP()                                              | 2023-08-28 09:37:08 |              |
+
+### 3.2 常见日期
 
 ```sql
--- 1. 获取日期，时间
-SELECT CURDATE();        -- 2022-05-18
-SELECT CURRENT_DATE();
-
-CURTIME();               -- 10:21:58
-CURRENT_TIME;
-
-SELECT NOW();            -- 2022-05-18 10:22:45
-SYSDATE()
-CURRENT_TIMESTAMP()
-LOCALTIME()
-LOCALTIMESTAMP()
-
-UTC_DATE                -- 世界标准时间 2022-05-18
-UTC_TIME                -- 02:27:40
-UTC_TIMESTAMP           -- 2022-05-18 02:27:41
-
-
--- 2. 获取年月日周天
+-- 1. 获取年月日周天
 YEAR(NOW()), MONTH(NOW()),  DAY(NOW());  -- 年月日,参数date
 MONTHNAME(NOW()),WEEKDAY(NOW()),QUARTER(NOW()); 
 WEEK(NOW()),WEEKDAY(NOW()),WEEKOFYEAR(NOW());
@@ -811,23 +811,23 @@ DAYOFMONTH(NOW()),DAYOFYEAR(NOW()),DAYOFWEEK(NOW());
 HOUR(CURRENT_TIME), MINUTE(CURRENT_TIME),SECOND(CURRENT_TIME); -- 时分秒，参数time
 
 
--- 3. 日期操作函数 EXTRACT(type from date)
+-- 2. 日期操作函数 EXTRACT(type from date)
 SELECT EXTRACT(SECOND FROM NOW());
 SELECT EXTRACT(MINUTE_MICROSECOND FROM NOW());
 
--- 4. 日期与时间戳转换
+-- 3. 日期与时间戳转换
 SELECT UNIX_TIMESTAMP();        -- 以UNIX时间戳的形式返回当前时间 1652841099
 SELECT UNIX_TIMESTAMP(NOW());   -- 将Data转换为UNIX时间戳
 SELECT UNIX_TIMESTAMP('2021-09-01: 10:24');
 
 SELECT FROM_UNIXTIME(1652841243); -- 将UNIX时间戳转换普通格式时间 2022-05-18 10:34:03
 
--- 5. 时间和秒转换
+-- 4. 时间和秒转换
 SELECT TIME_TO_SEC(CURRENT_TIME); -- time参数， 小时*3600+分钟*60
 SELECT SEC_TO_TIME(39421);        -- seconds参数
 
 
--- 6. 修改时间
+-- 5. 修改时间
 SELECT DATE_ADD(NOW(), INTERVAL 1 YEAR);   -- 加的具体的值可为负数
 SELECT ADDDATE(NOW(), INTERVAL 1 YEAR);
 SELECT DATE_SUB(NOW(), INTERVAL 1 MONTH);
@@ -836,23 +836,25 @@ SELECT DATE_ADD(NOW(), INTERVAL '1_1' YEAR_MONTH ); -- 同时加年和月
 SELECT DATEDIFF(NOW(),SUBDATE(NOW(),INTERVAL 1 YEAR)); -- 天数
 ```
 
-### 2.2 字符串和日期转换
+### 3.3 字符串和日期转换
+
+#### 指定格式转换
 
 ```sql
--- 1.日期转换为字符串，按照指定格式
+-- 日期转换为字符串，按照指定格式
 DATE_FORMAT(date, fmt);
 SELECT DATE_FORMAT(NOW(),'%Y-%m-%d');    -- 2022-05-18
 SELECT DATE_FORMAT(NOW(),'%Y-%m-%d %H:%i:%s'); -- 2022-05-18 11:25:11
 
-
-
--- 2.字符串转为日期
+-- 字符串转为日期
 -- 字符串和对应的格式需要匹配，不然会报错
 STR_TO_DATE(str, fmt)
 SELECT STR_TO_DATE('2021-09-05 12:38:16', '%Y-%m-%d %H:%i:%s');
+```
+
+```sql
 %Y -- 4位数年份
 %y -- 2位数年份
-
 %M -- 月名表示月份 January
 %m -- 两位数表示月份 01，02
 %b -- 缩写的月名  Jan Feb
@@ -870,9 +872,19 @@ SELECT STR_TO_DATE('2021-09-05 12:38:16', '%Y-%m-%d %H:%i:%s');
 %S %s -- 2位数字表示秒
 ```
 
-## 3. 流程控制函数
+#### 嵌套转换
 
-### 3.1 三元运算符
+- 上面的具体的格式，比较难记，可以利用mysql提供的嵌套函数来实现
+
+```sql
+SELECT STR_TO_DATE('2021-09-05 12:38:16', GET_FORMAT(DATETIME ,'ISO'));
+```
+
+![image-20230828174930198](https://erick-typora-image.oss-cn-shanghai.aliyuncs.com/img/image-20230828174930198.png)
+
+## 4. 流程控制函数
+
+### 4.1 三元运算符
 
 ```sql
 -- 1. IF(condition,result1, result2)
@@ -883,7 +895,7 @@ SELECT IF( 1=1,'positive','negative' ) as result;
 SELECT IFNULL(name,0) FROM phone;
 ```
 
-### 3.2 SWITCH 函数
+### 4.2 SWITCH 函数
 
 ```sql
 -- 1. case 函数 ： 类似switch，是用在from之前的，对于某些字段进行计算
@@ -910,7 +922,7 @@ SELECT *,
 FROM phone;
 ```
 
-## 4. 聚合函数
+## 5. 聚合函数
 
 ```sql
 -- 统计函数都会忽略null值：      字段为NULL时候，统计时候忽略该行（分子和分母都忽略该行）
@@ -933,7 +945,7 @@ INNODB:  COUNT(*) 和 COUNT(1)的效率差不多，  比COUNT(filed)效率高
 MYISAM:  三个都一样
 ```
 
-## 5.  GROUP BY
+## 6.  GROUP BY
 
 ```sql
 -- 单个列分组
@@ -951,7 +963,7 @@ GROUP BY nation, address;
 -- from前面的字段，可以不用写，一般建议写
 ```
 
-## 6. HAVING
+## 7. HAVING
 
 ```sql
 -- 1. 过滤条件中使用了聚合函数，则必须使用HAVING来替换WHERE
@@ -978,7 +990,7 @@ HAVING MAX(salary) > 10
    
 ```
 
-## 7. 执行过程
+## 8. 执行过程
 
 ```sql
 -- 书写顺序： 
