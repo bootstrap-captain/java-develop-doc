@@ -178,11 +178,9 @@ ADD season SET ('春', '夏', '秋', '冬') null;
 
 ![img](https://cdn.nlark.com/yuque/0/2022/png/26882770/1653098878471-44b03851-62b2-47a0-a1c7-f4c6def68273.png)
 
-# 基本指令
+# 库表操作
 
-## 1. 库表操作
-
-### 库
+## 1. 库
 
 ```sql
 -- 1. 查看当前用户账户下所有库
@@ -212,7 +210,7 @@ DROP DATABASE my_db;
 DROP DATABASE IF EXISTS my_db;
 ```
 
-### 表
+## 2. 表
 
 - 表操作，要么库名.表名，要么在sql脚本前面指定用那个库
 
@@ -705,46 +703,7 @@ SELECT * FROM student stu RIGHT JOIN president pre USING(id);
 SELECT * FROM student stu NATURAL LEFT JOIN president pre;
 ```
 
-
-
 ![img](https://img-blog.csdnimg.cn/20200816180642864.jpg?x-oss-process=image/watermark,type_ZmFuZ3poZW5naGVpdGk,shadow_10,text_aHR0cHM6Ly9ibG9nLmNzZG4ubmV0L3dlaXhpbl80MzM3NDU3OA==,size_16,color_FFFFFF,t_70#pic_center)
-
-## 5. 子查询
-
-```sql
--- 子查询先执行，外查询后执行
--- 单行操作符对应单行子查询， 多行操作符对应多行子查询
--- 子查询可以作用于where，having，case中
-
--- 1. 子查询： 单行子查询
--- 操作符号： =      >      >=       <       >=     !=
--- 建议先写子查询，再去写外查询
--- 子查询如果没有数据，那么整体查出来也没数据
-SELECT *
-FROM employee
-WHERE salary > (SELECT salary FROM employee WHERE first_name = '王'); 
-          
-
-
--- 2. 多行子查询： 内查询返回多条数据
--- IN: 列表中任意一个
--- ANY: 需要和单行操作符一起使用，和字查询返回的某一个值比较
--- ALL/SOME: 需要和单行操作符一起使用，和字查询返回的所有值比较
-
-SELECT *
-FROM employee
-WHERE salary in (SELECT salary FROM employee);
-
--- 比任一的都小就可以查
-SELECT *
-FROM employee
-WHERE salary < ANY (SELECT salary FROM employee WHERE address = '上海');
-
--- 比所有的小才行
-SELECT *
-FROM employee
-WHERE salary < ALL (SELECT salary FROM employee WHERE address = '上海');
-```
 
 # 单行函数
 
@@ -927,6 +886,8 @@ FROM phone;
 
 # 聚合函数
 
+- 聚合函数不能嵌套使用，必须使用子查询
+
 ## 1. 常用函数
 
 - 聚合函数统计时，都会忽略null值。分子和分母都会忽略该行
@@ -1020,8 +981,80 @@ FROM-> WHERE->GROUP BY->HAVING->SELECT字段->DINSTINCT->ORDER BY ->LIMIT
 # 子查询
 
 - 一个查询语句嵌套在另一个查询语句内部的查询
+- 子查询先执行，主查询后执行。子查询结果要传递给主查询
+- 单行子查询对应单行子查询，多行子查询对应多行子查询
+
+## 1. 单行/多行
+
+### 1.1 单行子查询
+
+- 单行子查询，返回的就是一个单字段值
+
+```sql
+# 单行操作符： 通过 =    >    >=     <    <=      <>(不等于)来比较
+
+# 先写子查询，再写外查询
+SELECT name, salary
+FROM employee
+WHERE salary > (SELECT salary FROM employee WHERE name = 'tom');
 
 
+# 可以包含多个子查询
+SELECT id, name, salary
+FROM employee
+WHERE salary > (SELECT salary FROM employee WHERE name = 'lucy')
+  AND id > (SELECT id FROM employee WHERE name = 'jack');
+  
+
+# 配合聚合函数
+SELECT id, name, salary
+FROM employee
+WHERE salary > (SELECT MIN(salary) FROM employee)
+
+# 空值问题
+-- 子查询如果没有记录，则外查询匹配时，也就没有对应的数据
+-- 假如没有tom这个人，则比较运算符比较时，条件永远都是false
+SELECT name, salary
+FROM employee
+WHERE salary > (SELECT salary FROM employee WHERE name = 'tom');
+
+
+-- FROM中也可以跟子查询
+-- 聚合函数不能嵌套
+SELECT *
+FROM employee
+WHERE salary > (SELECT MIN(avg_salary)
+                FROM (SELECT AVG(salary) AS avg_salary
+                      FROM employee
+                      GROUP BY id) AS temp_table)
+```
+
+### 1.2 多行子查询
+
+```sql
+-- 多行子查询： 内查询返回多条数据
+-- IN: 列表中任意一个
+-- ANY: 需要和单行操作符一起使用，和字查询返回的某一个值比较
+-- ALL/SOME: 需要和单行操作符一起使用，和字查询返回的所有值比较
+
+SELECT *
+FROM employee
+WHERE salary in (SELECT salary FROM employee);
+
+-- 比任一的都小就可以查
+SELECT *
+FROM employee
+WHERE salary < ANY (SELECT salary FROM employee WHERE address = '上海');
+
+-- 比所有的小才行
+SELECT *
+FROM employee
+WHERE salary < ALL (SELECT salary FROM employee WHERE address = '上海');
+```
+
+## 2. 相关/不相关
+
+// TODO 
 
 # 约束
 
