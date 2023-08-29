@@ -746,7 +746,7 @@ FROM employee
 WHERE salary < ALL (SELECT salary FROM employee WHERE address = '上海');
 ```
 
-# 函数
+# 单行函数
 
 ## 1. 数值函数
 
@@ -887,18 +887,19 @@ SELECT STR_TO_DATE('2021-09-05 12:38:16', GET_FORMAT(DATETIME ,'ISO'));
 ### 4.1 三元运算符
 
 ```sql
--- 1. IF(condition,result1, result2)
+-- IF(condition,result1, result2)
 -- 条件中可以用 = <= >=  is null等判断
 SELECT IF( 1=1,'positive','negative' ) as result;  
 
--- 2. IFNULL(value,0);  
+
+-- IFNULL(value,0): 如果为空，则给0值，否则就用原来的值
 SELECT IFNULL(name,0) FROM phone;
 ```
 
-### 4.2 SWITCH 函数
+### 4.2 CASE WHEN
 
 ```sql
--- 1. case 函数 ： 类似switch，是用在from之前的，对于某些字段进行计算
+-- 类似switch，是用在from之前的，对于某些字段进行计算
 SELECT *,
        CASE brand
            WHEN 'Apple' THEN price * 0.9
@@ -906,10 +907,11 @@ SELECT *,
            WHEN 'XiaoMi' THEN price * 0.7
            WHEN 'Oppo' THEN price * 0.6
            ELSE price
-           END AS discount_price
+           END 
+           AS discount_price
 FROM phone;
 
--- 2. case 函数 ： 类似多重if，  适用于区间比较。  case 后没有字段 ， 
+-- 2. 类似多重if，  适用于区间比较。  case 后没有字段
 SELECT *,
        CASE
            WHEN price >= 5000 THEN 'LEVEL-A'
@@ -918,63 +920,77 @@ SELECT *,
            WHEN price >= 2000 THEN 'LEVEL-D'
            WHEN price >= 1000 THEN 'LEVEL-E'
            ELSE 'LEVEL-LOW'
-           END AS product_level
+           END 
+           AS product_level
 FROM phone;
 ```
 
-## 5. 聚合函数
+# 聚合函数
+
+## 1. 常用函数
+
+- 聚合函数统计时，都会忽略null值。分子和分母都会忽略该行
 
 ```sql
--- 统计函数都会忽略null值：      字段为NULL时候，统计时候忽略该行（分子和分母都忽略该行）
--- SUM()  AVG():              参数必须是数值类型                
--- MAX()  MIN()，COUNT():     参数为任何类型
+-- SUM()  AVG()：               参数必须是数值类型 
 
+-- MAX()  MIN()：               参数为任何类型
 
 SELECT MAX(age) from phone;
 SELECT SUM(DISTINCT(brand)) FROM phone;  -- 和distinct搭配
-
-
--- COUNT(*)    COUNT(field)    COUNT(1) 
-
--- COUNT(*)，COUNT(1)：没区别，统计不为null的行数目， 一行中一个字段不为null，总数就会计算该行
-
--- COUNT(field):  如果某个字段不为null，就统计
-
--- 性能： 
-INNODB:  COUNT(*) 和 COUNT(1)的效率差不多，  比COUNT(filed)效率高
-MYISAM:  三个都一样
 ```
 
-## 6.  GROUP BY
+```sql
+-- COUNT():                    参数为任何类型
+
+-- COUNT(*)    COUNT(field)    COUNT(1) 
+-- COUNT(*)，COUNT(1)：    没区别，统计不为null的行数目， 一行中只要一个字段不为null，总数就会计算该行
+-- COUNT(field):           如果某个字段不为null，就统计
+
+-- 性能： 
+INNODB:    COUNT(*)=COUNT(1) > COUNT(filed)
+MYISAM:    三个都一样， 引擎内部有计数器来维护行数
+```
+
+## 2.  GROUP BY
+
+- 只能结合聚合函数使用
+- select中的非聚合函数的字段，一定要出现在group by后面
 
 ```sql
--- 单个列分组
+-- 单列分组
 SELECT AVG(salary), SUM(salary), nation
 FROM employee
 GROUP BY nation;
 
--- 多个列分组: 先按照一个字段分为一个小组，再根据另外一个字段再分组，统计的是最小组的数据
--- 字段前后无区别
+-- 多列分组: 先按照a字段分组，再根据b字段分组，统计最小组的数据
+-- 字段前后无区别,因为from前面的是聚合函数
 SELECT nation, address, SUM(salary)
 FROM employee
 GROUP BY nation, address;
-
--- 结合聚合函数使用: from前面的字段只能是对应的聚合函数，group by的字段
--- from前面的字段，可以不用写，一般建议写
 ```
 
-## 7. HAVING
+## 3. HAVING
+
+### 3.1 基本使用
+
+- 过滤条件中如果使用了聚合函数，则必须使用HAVING来替换WHERE
 
 ```sql
--- 1. 过滤条件中使用了聚合函数，则必须使用HAVING来替换WHERE
---    HAVING 必须在 GROUP BY 后面
---    使用HAVING的前提： 使用GROUP BY, 不然就没有太多意义
+-- HAVING不能单独使用，必须结合GROUP BY
+-- HAVING必须声明在GROUP BY后面
 SELECT nation, MAX(salary)
 FROM employee
 GROUP BY nation
 HAVING MAX(salary) > 20000;
+```
 
--- 2. 加where和having的区别: 
+### 3.2 HAVING/WHERE
+
+- 过滤条件中有聚合函数的，则过滤条件必须声明在HAVING中
+- 过滤条件不是聚合函数的，则过滤条件声明在HAVING和WHERE都可，但是建议声明在WHERE中
+
+```sql
 -- 推荐，where, 实现效率高
 SELECT address, MAX(salary)
 FROM employee
@@ -986,11 +1002,10 @@ SELECT address, MAX(salary)
 FROM employee
 GROUP BY address
 HAVING MAX(salary) > 10
-   AND address = '上海';
-   
+   AND address = '上海';  
 ```
 
-## 8. 执行过程
+## 4. 执行过程
 
 ```sql
 -- 书写顺序： 
@@ -1001,6 +1016,12 @@ FROM-> WHERE->GROUP BY->HAVING->SELECT字段->DINSTINCT->ORDER BY ->LIMIT
 
 -- 尽可能每次执行，都最多的去过滤掉数据
 ```
+
+# 子查询
+
+- 一个查询语句嵌套在另一个查询语句内部的查询
+
+
 
 # 约束
 
