@@ -99,77 +99,99 @@ JSON类型：       JSON对象    JSON数组
 
 ```sql
 -- 应用场景
-TINYINT:  一般用于枚举类型
-SMALLINT: 较小范围的统计数据
-MEDIUMINT: 较大整数的计算
-INT INTEGER：  取值范围足够大，一般就用这个
-BIGINT: 只有处理特别巨大的整数才会用到
+TINYINT:          一般用于枚举类型
+SMALLINT:         较小范围的统计数据
+MEDIUMINT:        较大整数的计算
+INT INTEGER：     取值范围足够大，一般就用这个
+BIGINT:           只有处理特别巨大的整数才会用到
 ```
 
 ## 2. 浮点类型
 
-- FLOAT: 单精度浮点数，4字节
-- DOUBLE: 双精度浮点数，8字节
-- DECIMAL(m,n): 更加精确
+| 类型   | desc         | 字节 | 取值范围 |
+| ------ | ------------ | ---- | -------- |
+| float  | 单精度浮点数 | 4    | 小       |
+| double | 双精度浮点数 | 8    | 大       |
 
 ```sql
--- UNSIGNED: 并不会改变正数数据的范围，因为符号位也占用空间，因此没必要显示声明UNSIGNED 
+# UNSIGNED: 并不会改变正数数据的范围，因为符号位也占用空间，因此没必要显示声明UNSIGNED 
+# double(m,n), float(m,n), 
+- m代表总的数字长度：  则整数长度为m-n，小数长度为n
+- 如果存入的小数位的精度超过了指定的精度，小数位会四舍五入
+- 如果整数位超了，则报错
 
--- 1. 四舍五入： 如果存入的数据的精度超过了指定的精度，小数位会四舍五入
+# 可能存在精确度丢失的问题
+```
 
--- 2.DECIMAL(5,2): -999.99~999.99
---                 底层是用字符串存储
--- 不指定的默认的是（10，0
+## 3. 定点类型
 
+```bash
+# DECIMAL(5,2): -999.99~999.99
+-- 底层是用字符串存储
+-- 不指定的默认的是（10，0)
+-- 超过精度的话，进行四舍五入
 -- 金融类的推荐用Decimal,一分钱都不能差
 ```
 
-## 3. 日期时间
+## 4. 日期时间
 
 - 添加格式为字符串或者数字，日期函数，会自动转换
+- <font color=orange>DATETIME</font>: 插入的数据和读取的数据一样， 建议使用
+- TIMESTAMP: 会根据时区变化， 底层存储的是毫秒数，查询日期时间差比较快
+
+```bash
+# 日期类型
+- 开发中建议使用DATETIME
+
+# 注册时间，商品发布等
+- 建议使用 时间戳， 因为DATETIME不方便计算
+- SELECT UNIX_TIMESTAMP();
+```
 
 ![img](https://cdn.nlark.com/yuque/0/2022/png/26882770/1653063414547-dd2c129f-65a0-4621-9963-788b5f6e4974.png) 
 
-```sql
--- DATETIME: 插入的数据和读取的数据一样， 建议使用
--- TIMESTAMP: 会根据时区变化， 底层存储的是毫秒数，查询日期时间差比较快
-```
-
-## 4. 文本类型
+## 5. 文本类型
 
 ![img](https://cdn.nlark.com/yuque/0/2022/png/26882770/1653065021718-15f76e1c-919e-4069-96e0-708a1c239bf9.png)
 
-### 4.1char/varchar
+### 5.1char/varchar
 
-![img](https://cdn.nlark.com/yuque/0/2022/png/26882770/1653097133973-0391ba8d-529e-4020-9127-49884a0ccb46.png)
+| 字符串类型 | 特点     | 长度范围字节 | 实际存储空间字符 | 空间 | 时间 | 场景                 |
+| ---------- | -------- | ------------ | ---------------- | ---- | ---- | -------------------- |
+| CHAR(M)    | 固定长度 | 0--255       | m                | 浪费 | 高   | 存储不大，速度要求高 |
+| VARCHAR(M) | 可变长度 | 0～65535     | 实际长度+1       | 节省 | 低   | 非char的情况         |
 
-**char**
+```bash
+# char
+- 需预定义长度，默认1个字符
+- 数据如果比声明的长度小，则在右侧填充空格达到指定长度
+- 检索时，char类型会自动去除尾部空格
+- 门牌号，uuid，变更频繁的column
 
-- 需要预定义长度，默认为1个字符，显示定义就是占用字节数
-- 保存的数据比声明的长度小，则在右侧填充空格达到指定长度，检索时，char类型会自动去除尾部空格
-
-**varchar**
-
+# varchar
 - 必须指定长度
-- varchar(n), 保存20个字符
-- 检索时，保留数据尾部的空格，存储空间为字符串实际长度加一个字节
-- 因为影响性能的主要因素是存储总量，推荐varchar
+- 插入时，会根据实际占用长度，一个字节来保存字符， 因此为 实际长度+1
+- 检索时，保留数据尾部的空格
 
-![img](https://cdn.nlark.com/yuque/0/2022/png/26882770/1653097976712-523adba1-80eb-49ce-b2f8-9577c458b530.png)
 
-### 4.2 text
+# 因为影响性能的主要因素是存储总量，推荐varchar
+```
+
+### 5.2 text
 
 - 主要用来存储大文本，比如评论，博客记录等
 - 频繁使用的表，不建议使用text，可以把该字段单独分表出去
 
-### 4.3 enum/set
+### 5.3 enum/set
+
+- 插入时候只能插入一个值
 
 ```sql
 ADD season ENUM ('春', '夏', '秋', '冬') null;
 ADD season SET ('春', '夏', '秋', '冬') null;
 ```
 
-## 5. 二进制字符串
+## 6. 二进制字符串
 
 - 存储图片，音频等数据
 - 一般都是用S3/OSS等存储资源，mysql中保留对应的url
@@ -178,43 +200,55 @@ ADD season SET ('春', '夏', '秋', '冬') null;
 
 ![img](https://cdn.nlark.com/yuque/0/2022/png/26882770/1653098878471-44b03851-62b2-47a0-a1c7-f4c6def68273.png)
 
+## 开发建议
+
+```bash
+# 整数类型，就用int
+
+# 小数类型是DECIMAL，禁止使用float和double
+- 如果超过范围，可以将decimal拆成整数和小数分开存储
+
+# 如果字段是非负数，必须是UNSIGNED
+
+# 日期时间类型： datatime
+
+# 字符串类型
+- 如果为定长，则使用char
+- 如果为可变，则用varchar，长度不要超过5000，否则就使用text，并独立出一张表，用主键来对应
+
+```
+
 # 库表操作
 
 ## 1. 库
 
 ```sql
--- 1. 查看当前用户账户下所有库
-SHOW DATABASES;
+SHOW DATABASES;          -- 查看当前用户账户下所有库
+SELECT DATABASE();       -- 查看当前使用的库，  一般当前为null
+USE lucycat;             -- 切换库, 每次开启新的会话，当前库是null
 
--- 2. 查看当前使用的库，   一般当前为null
-SELECT DATABASE();
+-- 创建库
+-- 默认为utf8mb4，判重是用库名来判断， 数据库名不能改
+CREATE DATABASE  shuzhan_db;
+CREATE DATABASE IF NOT EXISTS shuzhan_db;
 
--- 3. 切换库, 每次从mysql断开重新打开，当前使用的库就是null
-USE lucycat; 
+-- 查看库信息
+SHOW CREATE DATABASE shuzhan_db;
 
-
--- A. 创建库
--- 默认为utf8mb4
-CREATE DATABASE shuzhan_db;
-CREATE DATABASE my_db CHARACTER SET 'utf8mb4';
-CREATE DATABASE IF NOT EXISTS shuzhan_db; 
-
-
--- B. 修改库的字符集
-ALTER DATABASE shuzhan_db CHARACTER SET 'utf8mb4';
--- 数据库名不能改
-
-
--- C. 删除库
-DROP DATABASE my_db;
+-- 删除库
+DROP DATABASE  my_db;
 DROP DATABASE IF EXISTS my_db;
+
+-- 字符集
+CREATE DATABASE my_db CHARACTER SET 'utf8mb4';        -- 创建时
+ALTER DATABASE shuzhan_db CHARACTER SET 'utf8mb4';    -- 修改库的字符集
 ```
 
 ## 2. 表
 
 - 表操作，要么库名.表名，要么在sql脚本前面指定用那个库
 
-#### 创建
+### 2.1 创建
 
 ```sql
 -- 1. 列出当前数据库所有表
@@ -232,7 +266,7 @@ CREATE TABLE `people` (
 ) CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 ```
 
-#### 描述
+### 2.2 描述
 
 ```sql
 -- 1. 描述一个表
@@ -249,76 +283,74 @@ SHOW FULL FIELDS/COLUMNS FROM people;
 SHOW CREATE TABLE people;
 ```
 
-#### 修改表
+### 2.3 修改
 
 ```sql
 -- 1. 添加field
-ALTER TABLE employee ADD status boolean;
-ALTER TABLE employee ADD home varchar(50) FIRST ;
+ALTER TABLE employee ADD 'status' boolean;                         # 默认添加到最后
+ALTER TABLE employee ADD home varchar(50) FIRST;
 ALTER TABLE employee ADD hobby varchar(50) AFTER home;
 
 -- 2. 修改field
 ALTER TABLE employee MODIFY home VARCHAR(100);
 ALTER TABLE employee MODIFY status BOOLEAN DEFAULT 1;
 
- -- 3. 重命名field
- ALTER TABLE employee CHANGE status is_enabled BOOLEAN;
+-- 3. 重命名field
+ALTER TABLE employee CHANGE 'status' is_enabled BOOLEAN;
+ALTER TABLE employee CHANGE home myhome VARCHAR(200);                   # 重命名字段名，并且修改长度
  
- -- 4. 删除field
- ALTER TABLE employee DROP is_enabled;
+-- 4. 删除field
+ALTER TABLE employee DROP is_enabled;
+ALTER TABLE employee DROP COLUMN is_enabled;
+  
+-- 5.重命名table
+RENAME TABLE employee TO employees;
+ALTER TABLE  employees RENAME TO employee;
  
- 
- -- 5.重命名表
- RENAME TABLE employee TO employees;
- ALTER TABLE  employees RENAME TO employee;
- 
- 
--- 6. 修改存储引擎
+-- 6. 修改table存储引擎
 ALTER TABLE people ENGINE = MyISAM;
 ```
 
-#### 删除
+### 2.4 删除
 
 ```sql
--- 1. 删除一个表： 删除表结构和表数据，释放表空间
---    删除后不能回滚
+-- 1. 删除表： 删除表结构和表数据，释放表空间
+--    不能回滚
 DROP TABLE cnip;
 DROP TABLE cnip,phone;
 DROP TABLE IF EXISTS cnip;
 
-
 -- 2. 清空表: 表数据清除，表结构保留
-TRUNCATE TABLE people;
-DELETE FROM people; 
+TRUNCATE TABLE people;     
+DELETE FROM people;        
 
+# TRUNCATE:   
+- 速度较快，且使用的系统和事务日志资源少
+- 不支持rollback， 类似其他DDL
+- 无事务且不触发TRIGGER，有可能造成事故，因此不建议使用
+- DDL执行完后，必然就会自动提交
 
--- TRUNCAT: 不可回滚                           
--- 其他DDL 也适用,   DDL执行完成后会自动COMMIT
--- DDL在8.0中支持事务， 比如删除多张表，如果失败则回滚
-
--- DELETE: 可以部分删除， 可以回滚(), 利用事务              其他DML 也适用
-
-● TRUNCATE比DELETE速度快，且使用的系统和事务日志资源少
-● 但TRUNCATE无事务且不触发TRIGGER，有可能造成事故，因此不建议使用
+# DELETE: 
+- 可以部分删除
+- 可以利用事务进行rollback
 ```
 
-#### 复制
+### 2.5 复制
 
 ```sql
--- 1. 仅仅复制表的结构
-CREATE TABLE cn_phone LIKE phone;
-
--- 2. 复制表结构和数据
+# 复制时候，SELECT 结构可以比较复杂，同时也可以对其中的字段其别名，作为新表的字段名
+-- 1. 复制表结构和数据
 CREATE TABLE us_phone AS SELECT * FROM phone;
 
--- 3. 原表的部分复制
+-- 2. 原表的部分复制
 CREATE TABLE us_apple_phone AS SELECT * FROM phone WHERE brand = 'Apple';  
 
--- 4. 原表的结构复制
+-- 3. 原表的结构复制
 CREATE TABLE us_apple_phone AS SELECT * FROM phone WHERE 1=2; 
+CREATE TABLE cn_phone LIKE phone;
 ```
 
-#### 分区表
+### 2.6 分区表
 
 - 大数据量表，读写操作效率低，将一个大表的行数据，分配到不同的表
 
@@ -344,13 +376,13 @@ PARTITION pmax VALUES LESS THAN MAXVALUE
 )
 ```
 
-### 行
+## 3. 行
 
-#### 插入
+### 3.1 插入
 
 ```sql
---  全列插入：必须包含所有的列数据。不推荐这种方式
--- 批量插入执行效率更高
+-- 全列插入：必须包含所有的列数据。不推荐这种方式
+-- 批量快
 INSERT INTO president VALUES (1,"shu","zhan");
 INSERT INTO president VALUES (2,"wu","wang"),(3,"si","li");
 
@@ -367,12 +399,13 @@ SELECT name, created_time
 FROM phone;
 ```
 
-#### 删除/更新
+### 3.2 删除/更新
 
 ```sql
 -- 1. 删除: 删除所有数据
 DELETE FROM cnip;
--- 指定删除： 一般删除时候，必须加where子句，避免误删
+
+-- 指定删除： 一般删除时，必须加where子句，避免误删
 DELETE FROM cnip WHERE name = 'zhangsan';
 
 
@@ -1054,55 +1087,59 @@ WHERE salary < ALL (SELECT salary FROM employee WHERE address = '上海');
 
 ## 2. 相关/不相关
 
-// TODO 
-
 # 约束
 
 ```sql
 -- 查看
 SELECT * FROM information_schema.TABLE_CONSTRAINTS WHERE TABLE_NAME='employee';
+
+# 单列约束 vs 多列约束
+# 列级约束：  将约束声明在对应字段的后面
+# 表级约束：  在表中所有字段声明后，在后面声明约束，  一般表级约束的目的就是为了给多列加
 ```
 
-## NOT NULL
+| 约束类型       | 表/列约束 | 单/多列约束 | 个数     | 约束名             | 索引关联 | Other                |
+| -------------- | --------- | ----------- | -------- | ------------------ | -------- | -------------------- |
+| NOT NULL       | 列级约束  | 单列        | 多个     | NA                 | NA       |                      |
+| UNIQUE         | 表/列约束 | 单列/多列   | 多个     | 默认列名，可自定义 | 唯一索引 | 允许列值为多个null   |
+| PRIMARY KEY    | 单列/多列 | 单列/多列   | 一个     | PRIMARY            | 主键索引 | 非空+唯一约束        |
+| AUTO_INCREMENT | 单列/多列 | 单列/多列   | 最多一个 |                    |          | 约束的必须是整数类型 |
+| CHECK          |           |             |          |                    |          |                      |
+| DEFAULT        |           |             |          |                    |          |                      |
 
-- 所有类型的值都可以是NULL, 包括int，float等数据类型
-- 只能出现在表的列上，不能表级约束
-- 只能限制单列，可定义多个
+## 1. NOT NULL
+
+- 所有类型的值都可是NULL, 包括int，float等数据类型
 - 空字符串‘’和0不等于null
 - 该约束不会出现在information_schema.TABLE_CONSTRAINTS中, 可以通过DESC来查看
 
 ```sql
-# 1.创建时
+# 1.创建表时
 CREATE TABLE erick (name VARCHAR(20) NOT NULL);
  
-# 2. 创建后
+# 2. 创建表后添加新字段
 ALTER TABLE erick
     ADD COLUMN address VARCHAR(20) NOT NULL;
 
+# 3. 创建表后给原字段
 ALTER TABLE erick
     MODIFY address VARCHAR(40) NOT NULL;
     
-# 3. 删除约束
+# 4. 删除某个字段的约束
 ALTER TABLE erick
     MODIFY address VARCHAR(40) NULL;
 ```
 
-## UNIQUE
-
-- 一个表中可以存在多个
-- 可以是某个列的值唯一，也可以是多个列组合的值唯一
-- 允许列值为多个null值
-- 唯一约束命名默认名：和列名相同
-- 唯一约束默认会创建一个唯一索引
+## 2. UNIQUE
 
 ```sql
-# 1.创建时： 可以指定约束名， 可以不指定
+# 1.创建表时： 可以指定约束名， 可以不指定
 CREATE TABLE erick (name VARCHAR(20) UNIQUE);       # 列约束
 
 CREATE TABLE lucy (id int, name VARCHAR(20),
 CONSTRAINT uk_name UNIQUE(name));                   # 表级约束，可以指定约束名uk_name，也可以不指定
     
-# 2. 创建后    
+# 2. 创建表后添加   
 ALTER TABLE lucy
     ADD CONSTRAINT uk_name UNIQUE (name);           # 表级约束
 
@@ -1127,14 +1164,9 @@ ALTER TABLE user
     DROP INDEX uk_user_name;
 ```
 
-## PRIMARY KEY
+## 3. PRIMARY KEY
 
-- 主键约束：相当于非空+唯一约束
-- 一个表最多并且一般都会包含一个
-- 主键约束对应表中的一列或多列， 多列的时候每个列都不允许为null
-- 主键名永远是 PRIMARY
-- 主键约束对应主键索引
-- 一般不要去修改主键的值
+- 主键约束多列时，每个列都不允许为null
 
 ```sql
 # 1. 创建表时
@@ -1168,11 +1200,9 @@ ALTER TABLE my_erick_tb
     DROP PRIMARY KEY;
 ```
 
-## AUTO_INCREMENT
+## 4. AUTO_INCREMENT
 
-- 一个表最多只能有一个自增长列
 - 必须作用在唯一或主键上
-- 约束的必须是整数类型
 - 主键声明有自增，添加数据时，不要给主键赋值
 
 ```sql
@@ -1195,9 +1225,7 @@ ALTER TABLE erick
 删除一条数据后(如id=10)，新增的数据，会沿用之前的值，下一个值就是11，即使重启服务器也是
 ```
 
-## CHECK
-
-- 5.8的新特性
+## 5. CHECK
 
 ```sql
 -- check约束
@@ -1209,7 +1237,7 @@ CREATE table erick_shu
 );
 ```
 
-## DEFAULT
+## 6. DEFAULT
 
 - 建表时，加not null defalut‘’或default 0 ，不想让表中出现null值
 - null不好比较，同时效率不高，影响索引效果
@@ -1231,78 +1259,75 @@ ALTER TABLE erick_shu
     MODIFY name VARCHAR(20);
 ```
 
-# 二、视图
+# 系统变量
 
-## 1. 基本介绍
+- 系统定义的，属于<font color=orange>服务器</font>层面。启动MySQL服务器实例期间，为服务器内存中的系统变量赋值
+- 定义了MySQL服务器实例的属性，特征，要么是<font color=orange>编译MySQL时参数的默认值</font>，要么是<font color=orange>配置文件</font>(my.conf)中的参数值
+- [官网系统变量](https://dev.mysql.com/doc/refman/8.0/en/server-system-variable-reference.html)
+- 如果一个变量，即时全局系统变量，也是会话系统变量，则修改时候一定要声明，到底是改的什么范围
 
-- 只把数据的一部分展示给用户，可以使用视图，类似一种权限管理
-- 视图是一种虚拟表，本身不具有数据，占用很少的内存空间
-- 视图建立在已有表的基础上，原表称为基表
+![image-20230807105100648](https://erick-typora-image.oss-cn-shanghai.aliyuncs.com/img/image-20230807105100648.png)
 
-## 2. 特性
+## 1. 全局系统变量
 
-- 视图的创建和删除只会影响视图本身，不影响对应的基表。但是对视图中的数据进行增删改操作时，数据表中的数据会响应发生变化，反之亦然
-- 小型项目的数据库可以不使用视图。但是在大型项目中，以及数据表比较复杂的情况下，可以把经常查询的结果放到虚拟表中，提升使用效率
-  ![img](https://img-blog.csdnimg.cn/e3814fc5e2734c43ae5dfe51616451fd.png)
-
-## 3. 使用
-
-```sql
--- 1. 创建
-CREATE VIEW employee_view AS
-SELECT *
-FROM employee;
-
--- select中的别名会当作view中的列名
-CREATE VIEW employee_view_second AS
-SELECT first_name AS f_name, last_name AS l_name
-FROM employee;
-
-CREATE VIEW employee_view_third(f_name, l_name) AS
-SELECT first_name, last_name
-FROM employee;
-
--- 基于视图创建视图
-CREATE VIEW employ_last_view AS
-SELECT *
-FROM employee_view_second;
-
--- 任何select中的数据结果集，都可以作为view
--- 2. 查询
-SELECT * FROM employee_view;
-
--- 3. 查询视图
-SHOW TABLES;  --查看到所有的表和视图 
-DESC employee_view_second; -- 查看视图结构
-SHOW CREATE VIEW employee_view_second;  -- 查看视图
-```
-
-
+- <font color=orange>global</font>：在MySQL初始化启动后，所有的全局系统变量就已经加载好了
+- 修改后，针对所有会话都有效，但是服务器重启后，修改失效
+- <font color=orange>静态变量</font>：特殊的全局系统变量，在MySQL服务实例运行期间，它们的值不能使用set动态修改。如innodb_buffer_pool_instances
 
 ```sql
--- 修改了视图中的数据，对应的表中数据也会变化  UPDATE/DELETE
--- 只有视图和对应的表中的数据对应起来的才可以
-UPDATE employee_view_second SET f_name='SHU' WHERE l_name='展';
+# 查看所有全局变量
+SHOW GLOBAL VARIABLES;
 
--- 删除视图, 基于A view的B view，A没了B也查不到
-DROP VIEW employ_last_view; 
-DROP VIEW IF EXISTS employ_last_view; 
+# 查看满足条件的
+SHOW GLOBAL VARIABLES LIKE '%标识%';
 
--- 修改视图
-CREATE OR REPLACE VIEW employee_view_second AS
-SELECT *
-FROM employee;   --如果有就替换
+# 查看指定系统变量: @@是标记系统变量
+SELECT @@GLOBAL.变量名;
+
+# 先查找会话系统变量，如果不存在，则查找全局系统变量
+SELECT @@变量名;
 ```
 
-## 4. 优缺优点
+## 2. 会话系统变量
+
+- <font color=orange>session</font>：会话连接后，会有默认值，也可以去设置这些值
+- 如果不写，默认会话级别
+- 只在当前会话有效，如果修改了某个会话系统变量的值，不会影响其他会话
+
+```sql
+# 查看所有会话变量, SESSION可以省略
+SHOW SESSION VARIABLES;
+SHOW VARIABLES;
+
+# 查看满足条件的
+SHOW SESSION VARIABLES LIKE '%标识%';
+
+# 查看指定系统变量
+SELECT @@SESSION.变量名;
+```
+
+## 3. 修改系统变量
 
 ```bash
-## 优点
-- 经常使用的查询定义为视图，不用关心对应的数据表结构，表关系，简化开发
-- 通过视图来控制权限，相当于对视图具有隔离性
-##  缺点
-- 如果表结构变了，那么视图就要修改，维护成本高
-- 特别是嵌套的视图
-- 小项目建议不要用视图，大项目考虑情况去使用
+#  方式一： 修改MySQL配置文件，达到修改MySQL系统变量的值
+- 修改方式是永久的
+- 必须重启MySQL服务器才能生效
 ```
 
+```SQL
+# 方式二： 直接修改对应的系统变量
+
+# 全局系统变量：服务器重启后失效
+SET @@GLOBAL.变量名=变量值;
+SET GLOBAL 变量名=变量值;
+
+# 会话系统变量：不影响其他会话，会话关闭后失效
+SET @@SESSION.变量名=变量值;
+SET SESSION 变量名=变量值;
+```
+
+```bash
+# 推荐方案
+- 先设置GLOABL，保证修改时候，不影响MYSQL服务
+- 再修改my.conf文件，保证后续重启后，就直接使用配置文件
+```
