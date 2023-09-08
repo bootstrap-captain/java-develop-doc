@@ -1,11 +1,11 @@
-# 安装单机版
+# 单机版
 
 - 环境：CentOS7.6，MySQL 8.0.27
 - [MySQL社区版](https://downloads.mysql.com/archives/community/)
 
 ![image-20230731163537301](https://erick-typora-image.oss-cn-shanghai.aliyuncs.com/img/image-20230731163537301.png)
 
-### 上传文件
+## 1. 上传文件
 
 ```bash
 # mac本地, 将文件上传到linux服务器的/opt目录下
@@ -33,7 +33,7 @@ cp mysql-community-libs-8.0.27-1.el7.x86_64.rpm erick_mysql
 cp mysql-community-server-8.0.27-1.el7.x86_64.rpm erick_mysql
 ```
 
-### CentOS7检查MySQL依赖
+## 2. CentOS7检查MySQL依赖
 
 ```bash
 # 检查/tmp临时目录权限(必不可少)
@@ -50,7 +50,7 @@ rpm -qa | grep net-tools
 yum install -y libaio
 ```
 
-### 安装
+## 3. 安装
 
 - 严格按照下面rpm顺序
 
@@ -78,7 +78,7 @@ mysql --version
 mysqladmin --version
 ```
 
-### 服务初始化
+## 4. 服务初始化
 
 - 为了保证数据库目录与文件的所有者为mysql登录用户，如果是以root身份运行mysql服务，需要执行命令初始化
 
@@ -106,7 +106,7 @@ systemctl enable mysqld.service
 systemctl disable mysqld.service
 ```
 
-### 登录
+## 5. 登录
 
 ```bash
 # 输入密码
@@ -122,7 +122,7 @@ alter user 'root'@'localhost' identified by '123456';
 show databases;
 ```
 
-### 远程连接
+## 6. 远程连接
 
 ```sql
 # 默认的root用户，只能是localhost来访问
@@ -134,63 +134,6 @@ UPDATE user SET host='%' WHERE user='root';
 
 # 一定要刷新一下
 FLUSH privileges;
-```
-
-### 密码安全强度-插件
-
-- MySQL8.0之前，使用validate_password插件检测，验证账户密码强度，保障账户的安全性
-- 通过安装/启用插件：会注册到元数据，也就是mysql.plugin表中，mysql重启后插件不会失效
-
-```sql
-mysql> INSTALL PLUGIN validate_password SONAME 'validate_password.so';
-
-# 就会报错： ERROR 1819 (HY000): Your password does not satisfy the current policy requirements
-ALTER USER 'root'@'%' IDENTIFIED BY 'abc1234';
-
-ALTER USER 'root'@'%' IDENTIFIED BY 'Abc_1234';
-```
-
-#### 1 查看具体要求
-
-```sql
-SHOW VARIABLES LIKE 'validate_password%';
-
-Variable_name                         | Value  |
-+--------------------------------------+--------+
-| validate_password_check_user_name    | ON     |
-| validate_password_dictionary_file    |        |
-| validate_password_length             | 8      |
-| validate_password_mixed_case_count   | 1      |
-| validate_password_number_count       | 1      |
-| validate_password_policy             | MEDIUM |
-| validate_password_special_char_count | 1      |
-```
-
-| 选项                                 | 默认值 | 描述                                                         |
-| ------------------------------------ | ------ | ------------------------------------------------------------ |
-| validate_password_check_user_name    | ON     | 设置为on时，表示能将密码设置为当前用户名                     |
-| validate_password_dictionary_file    |        | 用于检查密码的字典文件的路径名，默认为空                     |
-| validate_password_length             | 8      | 密码的最小长度                                               |
-| validate_password_mixed_case_count   | 1      | 密码策略是medium或者strong，要求密码具有的小写和大写的最小数量 |
-| validate_password_number_count       | 1      | 密码必须包含的数字个数                                       |
-| validate_password_policy             | MEDIUM | 0：low，只检查长度<br>1：medium，检查长度，数字，大小写，特殊字符<br>2：strong，检查长度，数字，大小写，特殊字符，字典文件 |
-| validate_password_special_char_count | 1      | 特殊字符的个数                                               |
-
-#### 2 修改安全策略
-
-```SQL
-# 修改安全策略
-SET GLOBAL validate_password_policy=LOW/MEDIUM/STRONG;
-SET GLOBAL validate_password_policy=0/1/2;
-
-# 修改密码长度
-SET GLOBAL validate_password_length=6;
-```
-
-#### 3 删除插件
-
-```
-mysql> UNINSTALL PLUGIN validate_password;
 ```
 
 #  Bin Log
