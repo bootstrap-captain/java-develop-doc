@@ -569,7 +569,7 @@ SHOW TABLE STATUS like '%table_name%'
 - <font color=orange>index_name</font>： 索引名称，可选参数。默认是col_name为索引名
 - <font color=orange>col_name</font>：需要创建索引的字段列
 - <font color=orange>length</font>：可选参数，表示索引的长度，只有字符串类型的字段才能指定索引长度
-- <font color=orange>ASC | DESC</font>：指定生序或者降序的索引值存储
+- <font color=orange>ASC | DESC</font>：指定升序或者降序的索引值存储
 
 ```SQL
 CREATE TABLE table_name [col_name data_type]
@@ -721,32 +721,67 @@ ALTER TABLE book5
 
 ### 4.1 字段数值有唯一性
 
-- 某个字段是唯一的：创建<font color=orange>唯一索引，或者主键索引</font>
-- 业务上具有唯一特性的字段：<font color=orange>即使是组合字段，也必须建成唯一聚簇索引</font>(阿里规范)
-- 唯一索引影响了insert速度，但损耗可以忽略，但提高查找速度很明显(查找B+树，找到一条记录后，就不再查找其余的页了)
+- <font color=orange>唯一索引，或者主键索引</font>
+- 业务上具有唯一特性的字段：<font color=orange>即使是组合字段，也必须建成唯一索引</font>(阿里规范)
+- 唯一索引影响了insert速度，但损耗可以忽略，明显提高查找速度(查找B+树，找到一条记录后，就不再查找其余的页了)
 
-### 4.2 频繁作为WHERE查询条件的字段
+### 4.2 WHERE查询的字段
 
-- 创建普通索引就可以大幅度提升数据查询的效率(根据B+树的搜索，可能搜索到多个数据页，但是不用扫全部页)
+- 普通索引即可大幅提升数据查询的效率(可能搜索多个数据页，但不用扫全部页)
 
-### 4.3 经常GROUP BY和ORDER BY的列
+### 4.3 UPDATE/DELETE的WHERE条件列
+
+- 数据按照某个条件进行查询后再进行UPDATE/DELETE， 对WHERE字段建立索引，就能大幅度提升效率
+- 如果更新的字段是非索引字段，提升效率更加明显，因为不需要对非索引字段进行索引维护
+
+### 4.4 GROUP BY/ORDER BY的字段
 
 - 索引就是让数据按照某种顺序进行存储和检索
 - 创建单列索引或者联合索引
-- 待补充 
-
-### 4.4 UPDATE/DELETE的WHERE条件列
-
-- 数据按照某个条件进行查询后再进行UPDATE/DELETE， 对WHERE字段建立索引，就能大幅度提升效率
-- 原理：<font color=orange>先要按照WHERE条件列检索出该条记录，然后再对其进行UPDATE/DELETE</font>
-- 如果更新的字段是非索引字段，提升效率更加明显，因为不需要对非索引字段进行索引维护
 
 ### 4.5 DISTINCT字段
 
 - 不加索引：全表扫描，将该字段在内存中去重
 - 加索引：<font color=orange>B+树相邻去重更快</font>，同时查出的数据是<font color=orange>递增排序</font>
 
-### 4.6 区分度高(散列性高)的列
+### 4.6 使用列的类型小的创建索引
+
+- 类型大小：指该列的该类型表示的数据范围的大小
+- 以整数为例，TINYINT, MEDIUMINT, INT, BIGINT, 占用的存储空间依次增加
+
+```bash
+# 数据类型越小
+- 查询时的比较操作越快
+- 索引占用的存储空间就越少，一个数据页能存放更多的数据记录，从而减少磁盘IO带来的性能损耗
+
+# 对主键尤其重要
+- 聚簇索引中会存储主键值，其他所有的二极索引的每个节点都会存储一份记录的主键值
+- 主键使用更小的数据类型，就会节省更多的存储空间和更加高效的I/O
+```
+
+### 4.7 前缀索引
+
+```bash
+# 长字符串作为二级索引的缺点
+- B+树的叶子结点需要存储该列的完整记录，占用较大的空间，查找索引数据页的IO会增大
+- 长字符串的比较，也会耗费性能
+```
+
+```sql
+# 前缀索引
+- 截取字段前面的一部分内容建立索引
+- 查找时虽不能精确定位到记录的位置，但是能定位到相应前缀所在的位置，然后再回表找到对应的主键，然后再来判断
+
+# 截取多少
+SELECT COUNT(DISTINCT(address)) / COUNT(*) from book;     # 查看选择度
+SELECT COUNT(DISTINCT(LEFT(address，索引长度)) / COUNT(*) from book;     # 查看选择度
+             
+ # 阿里手册
+ - 在varchar上建立索引时，必须指定索引长度，没有必要对全部字段建立索引，根据实际区分度来决定索引长度
+ - 一般区分度达到90%即可
+```
+
+### 4.8 区分度高的列
 
 - 列的基数：某一列中不重复数据的个数
 - 区分度：列基数/记录行数，区分度越接近1，越适合做索引
@@ -757,20 +792,17 @@ ALTER TABLE book5
 SELECT COUNT(DISTINCt a)/COUNT(*) FROM t1;
 ```
 
-## 6. 最佳实践
+### 4.9 使用最频繁的列，放在联合索引的左侧
 
-### 6.1 字符串前缀创建索引
+- 可以较少的建立一些索引，同时，最左前缀原则，可以增加联合索引的使用率
 
-### 6.2 单表的索引数量不超过6个
+### 4.10 多字段都要索引时，联合索引优于单值索引
 
-- <font color=orange>空间</font>：每个索引都需要占用磁盘空间
-- <font color=orange>性能</font>：被索引的字段的写操作，需要维护索引
-- <font color=orange>索引评估</font>： 优化器在选择如何优化查询时，会根据统一信息，对每一个可能用到的<font color=orange>索引来进行评估</font>，以生成一个最好的执行计划，如果有多个索引都可以用于查询，会<font color=orange>增加MySQL优化器生成执行计划时间</font>，降低查询性能
+### 4.11 多表Join操作注意
 
-### 6.3 数据量小的表不要加索引
-
-- 如果表记录少，比如少于1000个，不需要创建索引
-- 索引产生的非聚簇索引，查询时候需要回表，效率可能会更低
+- 连接的表的数量尽量不要超过3张，每增加一张表就增加了一次嵌套的循环，数量级增长比较快，严重影响查询效率
+- 对WHERE条件列创建索引
+- 对于连接的字段创建索引，并且该字段在多张表中的类型必须一致
 
 # 性能分析
 
@@ -796,10 +828,9 @@ SHOW GLOBAL|SESSION STATUS LIKE 'connections';
 
 ## 2. 慢查询日志
 
-- 用来记录在MySQL中<font color=orange>相应时间超过阈值</font>的语句，具体值运行时间超过<font color=orange>long_query_time</font>值的SQL，则会被记录到慢查询日志中
-- long_query_time：默认是10s
-- 作用：记录执行时间特别长的<font color=orange>SQL查询</font>，并且针对性的进行优化，提高系统的整体效率。当数据服务器发生阻塞，运行变慢，通过检查慢SQL日志，定位到慢查询来解决
-- MySQL默认<font color=orange>不开启慢查询日志</font>，需要手动开启。<font color=orange>除非调优需要，一般不建议启动该参数</font>，因为开启慢查询日志会对性能带来一定影响
+- 记录MySQL中<font color=orange>相应时间超过阈值</font>的SQL，具体值运行时间超过<font color=orange>long_query_time</font>值的SQL，则会被记录到慢查询日志中
+- 记录执行时间长的<font color=orange>SQL查询</font>，并针对性的优化，提高系统整体效率。当数据服务器发生阻塞，运行变慢，通过检查慢SQL日志，定位到慢查询来解决
+- 默认<font color=orange>不开启慢查询日志</font>，需要手动开启。<font color=orange>除非调优需要，一般不建议启动该参数</font>，因为开启慢查询日志会对性能带来一定影响
 
 ### 2.1 开启
 
@@ -816,7 +847,7 @@ slow_query_log_file,/var/lib/mysql/8bc168b1a471-slow.log
 # 默认阈值： 10s
 SHOW VARIABLES LIKE '%long_query_time%';
 
-# 修改阈值: 1s
+# 修改阈值: 1s    默认是10s
 SET long_query_time = 1;
 
 # 建议这些配置在mysql服务器中添加
@@ -825,13 +856,208 @@ SET long_query_time = 1;
 ### 2.2 分析
 
 - mysqldumpslow -help ;
+- 能够得到具体的执行过，对应慢查询的sql，后续再用EXPLAIN来进一步分析该sql
 
-```sql
-SHOW STATUS LIKE '%slow_queries';
-```
-
-## 3. Explain
+# Explain
 
 - 定位到慢查询的SQL后，使用EXPLIAN或者DESCRIBE工具做针对性的分析查询语句
+- EXPLAIN可以查看mysql对一条sql进行优化后的具体的执行计划是什么
 - Explain并没有真正执行后面的SQL语句，因此可以安全的查看执行计划
+
+```sql
+EXPLAIN / DESCRIBE sql;
+```
+
+## 1. 数据准备
+
+```sql
+# 加入十万条记录
+
+# 表1
+CREATE TABLE student
+(
+    id          INT AUTO_INCREMENT,
+    name        VARCHAR(100),
+    id_no       INT,
+    address     VARCHAR(100),
+    first_info  VARCHAR(100),
+    second_info VARCHAR(100),
+    third_info  VARCHAR(100),
+    other       VARCHAR(100),
+    PRIMARY KEY (id),
+    INDEX name_index (name),
+    UNIQUE INDEX id_no_index (id_no),
+    INDEX address_index (address),
+    INDEX multi_info_index (first_info, second_info, third_info)
+);
+
+# 表2
+CREATE TABLE girl
+(
+    id          INT AUTO_INCREMENT,
+    name        VARCHAR(100),
+    id_no       INT,
+    address     VARCHAR(100),
+    first_info  VARCHAR(100),
+    second_info VARCHAR(100),
+    third_info  VARCHAR(100),
+    other       VARCHAR(100),
+    PRIMARY KEY (id),
+    INDEX name_index (name),
+    UNIQUE INDEX id_no_index (id_no),
+    INDEX address_index (address),
+    INDEX multi_info_index (first_info, second_info, third_info)
+);
+```
+
+## 2. 属性值
+
+### 2.1 table
+
+- 具体查询的哪张表
+- 一个sql中，对几个表进行查询，就会出现几个表
+
+![image-20230911152806371](https://erick-typora-image.oss-cn-shanghai.aliyuncs.com/img/image-20230911152806371.png)
+
+### 2.2 id
+
+- 在一个大的查询语句中，每个SELECT关键字都会对应一个唯一的ID
+- id如果相同，可以认为是一组，从上往下执行
+- 所有组中，id值越大，优先级越高，越先执行
+- id每个独立的号码(不同)，表示一趟独立的查询，一个sql的查询趟数越少越好
+
+#### 子查询优化
+
+- 子查询涉及了另外一个表，但是唯一id只有一个，是因为mysql对子查询进行了优化
+
+![image-20230911153409946](https://erick-typora-image.oss-cn-shanghai.aliyuncs.com/img/image-20230911153409946.png)
+
+```sql
+# 子查询
+EXPLAIN SELECT * FROM student WHERE id IN (SELECT id FROM girl);
+
+# 子查询效率低，优先会使用多表连接的方式
+EXPLAIN SELECT * FROM student WHERE id IN (SELECT id FROM girl);
+```
+
+#### UNION
+
+- 会有三个id，因为涉及到了union去重，会创建一个临时表
+
+![image-20230911154026034](https://erick-typora-image.oss-cn-shanghai.aliyuncs.com/img/image-20230911154026034.png)
+
+#### UNION ALL
+
+- 不需要去重，所以只有两个id
+
+![image-20230911154121333](https://erick-typora-image.oss-cn-shanghai.aliyuncs.com/img/image-20230911154121333.png)
+
+### 2.3 select_type
+
+- 查询属性，确定一个小查询在大查询中扮演的角色
+
+#### simple
+
+- 查询语句中，不包含union或者子查询的都是 simple类型
+
+![image-20230911154929718](https://erick-typora-image.oss-cn-shanghai.aliyuncs.com/img/image-20230911154929718.png)
+
+#### primary
+
+- 包含了union，union all,  子查询的大查询，最左边的大的查询就是PRIMARY
+
+#### union
+
+- union的第二个查询
+
+#### union result
+
+- union all的结果集合
+
+![image-20230911154952064](https://erick-typora-image.oss-cn-shanghai.aliyuncs.com/img/image-20230911154952064.png)
+
+![image-20230911155013425](https://erick-typora-image.oss-cn-shanghai.aliyuncs.com/img/image-20230911155013425.png)
+
+### 2.4 type
+
+- mysql对某个表的执行查询时候的访问方法，比较重要
+
+```bash
+# 从上到下，性能依次降低
+system --> const -- >eq_ref --> ref --> fulltext --> ref_or_null --> index_merge
+unique_subquery --> index_subquery --> range --> index --> all
+
+# sql优化，至少要达到range级别，要求是ref，最好是const
+```
+
+#### system
+
+- 表中只有一条记录，并且该表使用的存储引擎的统计数据是精确的
+- MyISAM会有一个记录，专门记录一个表中的行数
+
+![image-20230911160053316](https://erick-typora-image.oss-cn-shanghai.aliyuncs.com/img/image-20230911160053316.png)
+
+- InnoDB则不会记录, 是会去表中进行全表扫描
+
+![image-20230911160222354](https://erick-typora-image.oss-cn-shanghai.aliyuncs.com/img/image-20230911160222354.png)
+
+#### const
+
+- 根据主键或者唯一二级索引列，与常数进行等值匹配时，对单表的访问方式
+- 因为数据的唯一性，找到一个数据后就不会再往后面找了
+
+![image-20230911160435784](https://erick-typora-image.oss-cn-shanghai.aliyuncs.com/img/image-20230911160435784.png)
+
+![image-20230911160830806](https://erick-typora-image.oss-cn-shanghai.aliyuncs.com/img/image-20230911160830806.png)
+
+#### eq_ref
+
+- 连接查询时，如果被驱动表是通过主键或者唯一二级索引列等值匹配的方式进行并访问，则被驱动表的访问方式就是eq_ref
+
+![image-20230911161406008](https://erick-typora-image.oss-cn-shanghai.aliyuncs.com/img/image-20230911161406008.png)
+
+#### ref
+
+- 通过普通二级索引列等值匹配的方式进行并访问，访问方式就是ref
+
+![image-20230911164316794](https://erick-typora-image.oss-cn-shanghai.aliyuncs.com/img/image-20230911164316794.png)
+
+#### ref_or_null
+
+- 普通二级索引等值匹配时，该索引列可能为null
+
+![image-20230911164438758](https://erick-typora-image.oss-cn-shanghai.aliyuncs.com/img/image-20230911164438758.png)
+
+#### index_merge
+
+- 多个查询列，都有索引，并且是or的关系
+
+![image-20230911164647140](https://erick-typora-image.oss-cn-shanghai.aliyuncs.com/img/image-20230911164647140.png)
+
+#### range
+
+- 根据某个索引，获取区间范围的值
+
+![image-20230911164841083](https://erick-typora-image.oss-cn-shanghai.aliyuncs.com/img/image-20230911164841083.png)
+
+#### all
+
+- 全表扫描
+
+![image-20230911165048466](https://erick-typora-image.oss-cn-shanghai.aliyuncs.com/img/image-20230911165048466.png)
+
+### 2.5 possible_key
+
+- 可能用到的索引
+
+### 2.6 key
+
+- 实际使用到的索引
+- 查询优化器，会在possible_key中选取一个，进行查找
+
+### 2.7 key_len
+
+- 实际使用到的索引长度(字节数)
+- 可以判断是否充分的利用了索引，数值越大越好
+- 主要针对联合索引
 
