@@ -995,6 +995,43 @@ public class SnsService implements BeanNameAware {
 }
 ```
 
+#### ApplicationContextAware
+
+- springboot项目中，假如想获取到当前spring的容器，可以实现ApplicationContextAware接口
+
+```java
+package com.black.pearl.beanProxy;
+
+import org.springframework.beans.BeansException;
+import org.springframework.context.ApplicationContext;
+import org.springframework.context.ApplicationContextAware;
+import org.springframework.stereotype.Component;
+
+@Component
+public class CaptainContainerContextAware implements ApplicationContextAware {
+
+    /*spring-boot-container*/
+    private static ApplicationContext captainContainer;
+
+    /*call back method*/
+    @Override
+    public void setApplicationContext(ApplicationContext applicationContext) throws BeansException {
+        this.captainContainer = applicationContext;
+    }
+
+    /**
+     * provide access to non-spring class in spring-boot-application
+     *
+     * @return
+     */
+    public static ApplicationContext getCaptainContainer() {
+        return captainContainer;
+    }
+}
+```
+
+
+
 ### 3.3. BeanPostProcessor-Before
 
 - Bean后置处理器，在Bean创建对象后(半成品对象)

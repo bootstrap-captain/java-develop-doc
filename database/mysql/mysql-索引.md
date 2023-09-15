@@ -804,6 +804,213 @@ SELECT COUNT(DISTINCt a)/COUNT(*) FROM t1;
 - 对WHERE条件列创建索引
 - 对于连接的字段创建索引，并且该字段在多张表中的类型必须一致
 
+# 查询优化
+
+- 物理优化：通过<font color=orange>索引</font>和<font color=orange>表连接方式</font>来进行优化
+- 逻辑优化：通过<font color=orange>sql等价变换</font>提升查询效率
+
+## 1. 索引实践
+
+- 是否使用索引，是由优化器来进行选择
+- 不是基于规则，而是基于cost开销，基于语义。
+- sql语句是否使用索引，和数据库版本，数据量，数据选择度都相关
+
+### 1.1 全值匹配最佳
+
+- 当where后面有多个查询条件时，对多个字段建立联合索引，效率最高
+
+```sql
+EXPLAIN SELECT * FROM student WHRER age=10 AND address='xian' AND class_id='abcd';
+
+# 创建的索引
+CREATE INDEX idx_age ON student(age);
+CREATE INDEX idx_age_address ON student(age,address);
+CREATE INDEX idx_age_address_class_id ON student(age,address,class_id);        # 效率最高，最终会选择这个
+```
+
+### 1.2 最左前缀原则
+
+- 联合索引中，最左优先，检索数据时，从联合索引的最左边开始匹配
+- 如果左边的值不确定，那么无法使用此索引
+
+```sql
+# 联合索引
+CREATE INDEX idx_age_address_class_id ON student(age,address,class_id); 
+
+# 会使用到全部索引
+EXPLAIN SELECT * FROM student WHRER age=10 AND address='xian' AND class_id='abcd';
+
+# 不会使用到索引： 没有age字段
+EXPLAIN SELECT * FROM student WHRER address='xian' AND class_id='abcd';
+
+# 会使用索引一部分： 
+EXPLAIN SELECT * FROM student WHRER age=10 AND class_id='abcd';
+```
+
+### 1.3 主键插入顺序
+
+- 如果主键是顺序插入，但是相邻两个数据之间有空隙，则后续插入的数据可能要插入之前数据之间，就可能造成数据页的分裂，影响性能
+- 插入的记录的主键值依次递增，让主键具有AUTO_INCREMENT，让存储引擎自己为表生成主键，而不是手动插入
+
+## 2. 索引失效
+
+### 2.1 计算，函数，类型转换
+
+- 对where条件后的字段，如果进行计算，函数，类型转换(手动或自动)会导致索引失效
+
+```sql
+# 函数
+EXPLAIN SELECT * FROM student WHRER name LIKE 'abc%';       # 正常使用索引
+EXPLAIN SELECT * FROM student WHRER LEFT(name,3) = 'abc';   # 索引失效，全表遍历(mysql不知道这个函数是做什么) 
+
+# 计算
+EXPLAIN SELECT * FROM student WHRER student_no = 99;       # 正常使用索引
+EXPLAIN SELECT * FROM student WHRER student_no+1 = 100;    # 索引失效，全表遍历(mysql不知道这个运算是做什么) 
+
+# 类型转换: varchar类型字段
+EXPLAIN SELECT * FROM student WHRER name='12345';       # 正常使用索引
+EXPLAIN SELECT * FROM student WHRER name=12345;         # 先把name做一个隐式的类型函数
+```
+
+### 2.2 范围条件右边的列
+
+- 根据搜索条件，先把等值匹配的列放在联合索引的前面，范围匹配的列放在联合索引的后面
+
+```sql
+CREATE INDEX idx_age_address_class_id ON student(address,age,class_id); 
+
+# class_id对应的索引就会用不上
+EXPLAIN SELECT * FROM student WHRER  address='xian' AND age>10 AND class_id='abcd';
+```
+
+### 2.3 不等于
+
+```sql
+CREATE INDEX idx_name ON student(name); 
+
+EXPLAIN SELECT * FROM student WHRER name='erick';      # 正常使用索引
+EXPLAIN SELECT * FROM student WHRER name!='erick';      # 正常使用索引    !=    <>
+```
+
+### 2.4 IS NULL
+
+- is null可以使用索引， is not null会无法使用索引
+- 最好在涉及数据表的时候，将字段设置为NOT NULL + DEFAULT约束
+
+### 2.5 LIKE通配符以%开头
+
+- like的通配符，如果第一个是%，索引就会失效
+- 数据页搜索严禁左模糊或全模糊，如果需要就用搜索引擎如es来解决
+
+### 2.6 OR前后存在非索引的列，索引失效
+
+```sql
+CREATE INDEX idx_name ON student(name); 
+
+# 计划一：name=erick 可以使用索引， age=12只能全表扫，然后把两个结果union起来
+# 计划二：还不如一次性扫全表
+EXPLAIN SELECT * FROM student WHRER name='erick' OR age=12;
+```
+
+### 2.7 数据库和表的字符集统一使用utf8mb4
+
+- 统一使用字符集，不同的字符集相互比较时，会先进行类型转换，从而导致索引失效
+
+## 3. 关联查询
+
+### 3.1 外连接
+
+- 连接条件，一旦数据类型不同，就存在隐式转换，就可能存在索引失效
+
+```sql
+# 左外连接和右外连接可以互相转换，因此以左外连接为例
+# 假设student中包含20条数据，book中包含100条数据
+EXPLAIN SELECT SQL_NO_CACHE * FROM student LEFT JOIN book ON student.id=book.id;
+
+
+# 1. 不加索引，
+-- 从student中取一个数据，book中把100条数据全拿出来，然后一一比较；
+-- 继续student的下一个数据，一共遍历20次
+
+
+# 2. 为被驱动表book的id加索引
+-- 从驱动表student中取一个数据，被驱动表利用索引快速找到id匹配的
+--  继续student的下一个数据，一共遍历20次
+```
+
+### 3.2 内连接
+
+- 如果表的连接条件中只能有一个字段有索引，则有索引的字段所在的表会被优化器作为被驱动表
+- 如果两个表的连接条件都有索引，则小表驱动大表
+
+```sql
+# 由查询优化器来决定谁作为驱动表，谁作为被驱动表
+# 驱动表一般是全表扫描，被驱动表一般是索引扫描
+EXPLAIN SELECT SQL_NO_CACHE * FROM student JOIN book ON student.id=book.id;
+```
+
+### 3.3 JOIN原理
+
+#### 驱动表/被驱动表
+
+
+
+#### 简单嵌套循环连接
+
+
+
+#### 索引嵌套循环连接
+
+
+
+#### 块嵌套循环连接
+
+
+
+#### HASH JOIN
+
+
+
+## 4. 子查询优化
+
+- 子查询可以一次性完成很多逻辑上需要多个步骤才能完成的SQL操作
+
+### 4.1 效率低
+
+- 执行子查询时候，mysql需要为内层查询的结果<font color=orange>建立一个临时表</font>，然后外层查询语句从临时表中查询记录。查询完毕后，再<font color=orange>撤销这些临时表</font>。消耗过多的CPU和IO资源，产生大量的慢查询
+- 子查询的结果存储的临时表，不管是内存临时表还是磁盘临时表，都<font color=orange>不会存在索引</font>，查询性能低
+- 返回结果集越大的子查询，其对查询性能的影响就越大
+
+### 4.2 替代方案
+
+- 用关联查询代替子查询。关联查询不需要建立临时表，速度比子查询要快
+
+## 5. 排序优化
+
+- MYSQL中支持两种排序方式：FileSort和INDEX排序
+- Index排序：索引可以保证数据的有序性，不需要再进行排序，效率更高
+- FileSor排序：一般在内存中进行排序，占用CPU较多。如果待排结果较大，会产生临时文件I/O到磁盘进行排序的情况，效率较低
+
+```bash
+# 优化建议
+- order by字句中使用索引，避免全表扫描，从而带来的FileSort排序
+- 无法使用INDEX时，需要对FileSort方式进行调优
+```
+
+
+
+## 6. 分组优化
+
+
+
+## 7. 分页优化
+
+
+
+
+
+
+
 # 性能分析
 
 ## 1. 查看系统性能参数
@@ -1060,4 +1267,21 @@ unique_subquery --> index_subquery --> range --> index --> all
 - 实际使用到的索引长度(字节数)
 - 可以判断是否充分的利用了索引，数值越大越好
 - 主要针对联合索引
+
+## 3 rows
+
+- 预估的查询出来的结果的行数
+
+## 4. filtered
+
+- 从对应的行数中，会有多少百分比的数据满足记录
+- 数值越高越好
+
+## 5. Extral
+
+# 数据库设计
+
+## 1. 主键
+
+
 
