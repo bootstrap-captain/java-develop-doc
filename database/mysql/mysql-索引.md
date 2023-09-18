@@ -1279,9 +1279,3 @@ unique_subquery --> index_subquery --> range --> index --> all
 
 ## 5. Extral
 
-# 数据库设计
-
-## 1. 主键
-
-
-
