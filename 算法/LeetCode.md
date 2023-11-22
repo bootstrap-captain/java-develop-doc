@@ -500,3 +500,117 @@ public boolean containsNearbyDuplicate(int[] nums, int k) {
 }
 ```
 
+## [1684. 统计一致字符串的数目](https://leetcode.cn/problems/count-the-number-of-consistent-strings/)
+
+### 位运算+32数组
+
+- 题目提示只包含小写字母的时候，就可以考虑使用位运算
+- int一共4个字节，一共包含32位，因此可以用一个整数来表示其出现的数组
+- 位运算，一个字符出现几次，并不能确定
+
+```bash
+# int整数表示小写字母的字符串: 重复字母，只统计一次
+0000 0000 0000 0000 0000 0000 0000 0001
+
+# allowed
+    # 出现字母a:   mask<<(ch-'a')
+0000 0000 0000 0000 0000 0000 0000 0001        
+
+    # 出现字母c:   mask<<(ch-'a')
+0000 0000 0000 0000 0000 0000 0000 0100       
+
+   # 同时出现a和c： 将a和c的结果进行按位与
+0000 0000 0000 0000 0000 0000 0000 0101 
+```
+
+```java
+    public int countConsistentStrings(String allowed, String[] words) {
+        int mask = 0;
+        char[] allowedChs = allowed.toCharArray();
+        for (char ch : allowedChs) {
+            int c = 1 << ch - 'a'; // 当前处理的字符
+            mask = mask | c;
+        }
+
+        int result = 0;
+        for (String word : words) {
+            char[] chs = word.toCharArray();
+            int mask1 = 0;
+            boolean flag = true;
+            for (char ch : chs) {
+                int c = 1 << ch - 'a'; // 每处理一个字符，就判断一下是否出现了allowed中没有的字符
+                mask1 = mask1 | c;
+                if ((mask1 | mask) != mask) {
+                    flag = false;
+                    break;
+                }
+            }
+
+            if (flag) {
+                result++;
+            }
+        }
+        return result;
+    }
+```
+
+
+
+### 26-int数组
+
+```java
+public int countConsistentStrings(String allowed, String[] words) {
+    int[] arr = new int[26];
+    char[] chs = allowed.toCharArray();
+    for (char ch : chs) {
+        arr[ch - 'a'] = 1;
+    }
+
+    int result = 0;
+    for (String str : words) {
+        boolean flag = true;
+        char[] chars = str.toCharArray();
+        for (char ch : chars) {
+            if (arr[ch - 'a'] == 0) {
+                flag = false;
+                break;
+            }
+        }
+        if (flag) {
+            result++;
+        }
+    }
+    return result;
+}
+```
+
+### 26-boolean数组
+
+- 效率更高
+
+```java
+public int countConsistentStrings(String allowed, String[] words) {
+    boolean[] arr = new boolean[26];
+    char[] chars = allowed.toCharArray();
+    for (char ch : chars) {
+        arr[ch - 'a'] = true;
+    }
+
+    int result = 0;
+    for (String word : words) {
+        boolean flag = true;
+        char[] chs = word.toCharArray();
+        for (char ch : chs) {
+            if (!arr[ch - 'a']) {
+                flag = false;
+                break;
+            }
+        }
+        if (flag) {
+            result++;
+        }
+    }
+    return result;
+}
+```
+
