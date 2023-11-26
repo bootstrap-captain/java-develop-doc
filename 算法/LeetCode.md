@@ -98,62 +98,6 @@ public int singleNumber(int[] nums) {
 
 
 
-## [206. 反转链表](https://leetcode.cn/problems/reverse-linked-list/)
-
-### 迭代+新链表-值
-
-- 构造一个新的链表
-- 旧链表依次拿到每个节点的值，创建一个新的节点，addFirst到新链表
-
-```java
-public ListNode reverseList(ListNode head) {
-    ListNode newHeader = null;
-    ListNode p = head;
-    while (p != null) {
-        newHeader = new ListNode(p.val, newHeader);
-        p = p.next;
-    }
-    return newHeader;
-}
-```
-
-### 迭代+新链表-节点
-
-- 移除旧链表的首节点，addFirst到新链表节点
-
-```java
-public ListNode reverseList(ListNode head) {
-    ListNode newHeader = new ListNode(-888, null);
-
-    while (head != null) {
-        ListNode removedFirst = head;  // 只是指针移动
-        head = head.next;              // 重定义head，上面的removedFirst的引用还在
-
-        removedFirst.next = newHeader.next; //  分割出新的节点
-        newHeader.next = removedFirst;       // 前节点
-    }
-
-    return newHeader.next;
-}
-```
-
-### 迭代+改变指针方向
-
-```java
-public ListNode reverseList(ListNode head) {
-    ListNode prev = null;
-    ListNode cur = head; // 当前处理的节点
-
-    while (cur != null) {
-        ListNode remain = cur.next; // 记录剩下的
-        cur.next = prev; // 调换方向
-        prev = cur;
-        cur = remain;
-    }
-    return prev;
-}
-```
-
 ## [88. 合并两个有序数组](https://leetcode.cn/problems/merge-sorted-array/)
 
 ### 逆向双指针
