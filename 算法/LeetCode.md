@@ -1,3 +1,42 @@
+## 😎[844. 比较含退格的字符串](https://leetcode.cn/problems/backspace-string-compare/)
+
+### 栈
+
+```java
+public boolean backspaceCompare(String s, String t) {
+    LinkedList<Character> first = getResult(s);
+    LinkedList<Character> second = getResult(t);
+    if (first.size() != second.size()) {
+        return false;
+    }
+
+    while (!first.isEmpty()) {
+        if (first.pop() != second.pop()) {
+            return false;
+        }
+    }
+    return true;
+}
+
+private LinkedList<Character> getResult(String str) {
+    char[] chs = str.toCharArray();
+    LinkedList<Character> stack = new LinkedList<>();
+    for (int i = 0; i < chs.length; i++) {
+        char ch = chs[i];
+        if (ch != '#') {
+            stack.push(ch);
+        } else {
+            if (!stack.isEmpty()) {
+                stack.pop();
+            }
+        }
+    }
+    return stack;
+}
+```
+
+
+
 ## [1. 两数之和](https://leetcode.cn/problems/two-sum/)
 
 ### Hash
