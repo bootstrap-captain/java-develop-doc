@@ -1,3 +1,88 @@
+## 回文
+
+### 😎[125. 验证回文串](https://leetcode.cn/problems/valid-palindrome/)
+
+#### 双指针 + api
+
+```java
+public boolean isPalindrome(String s) {
+    s = s.toLowerCase();
+    char[] chs = s.toCharArray();
+    int left = 0;
+    int right = chs.length - 1;
+    while (left < right) {
+        char leftCh = chs[left];
+        char rightCh = chs[right];
+        if (!Character.isLetterOrDigit(leftCh)) {
+            left++;
+            continue;
+        }
+        if (!Character.isLetterOrDigit(rightCh)) {
+            right--;
+            continue;
+        }
+        if (leftCh != rightCh) {
+            return false;
+        }
+
+        left++;
+        right--;
+    }
+    return true;
+}
+```
+
+#### 栈 + 队列 + 依次出
+
+```java
+public boolean isPalindrome(String s) {
+    s = s.toLowerCase();
+    char[] chs = s.toCharArray();
+    LinkedList<Character> stack = new LinkedList<>();
+    LinkedList<Character> queue = new LinkedList<>();
+    for (char ch : chs) {
+        if (Character.isLetterOrDigit(ch)) {
+            stack.push(ch);
+            queue.offer(ch);
+        }
+    }
+
+    while (!stack.isEmpty()) {
+        if (stack.pop() != queue.poll()) {
+            return false;
+        }
+    }
+    return true;
+}
+```
+
+
+
+### 😎[9. 回文数](https://leetcode.cn/problems/palindrome-number/)
+
+#### 转字符串 + 双指针
+
+```java
+public boolean isPalindrome(int x) {
+    String s = String.valueOf(x);
+    char[] chs = s.toCharArray();
+    int left = 0;
+    int right = chs.length - 1;
+    while (left < right) {
+        if (chs[left] != chs[right]) {
+            return false;
+        }
+        left++;
+        right--;
+    }
+    return true;
+}
+```
+
+#### 栈 + 队列 + 依次出栈
+
+
+
 ## 😎[844. 比较含退格的字符串](https://leetcode.cn/problems/backspace-string-compare/)
 
 ### 栈
