@@ -1,3 +1,39 @@
+## *️⃣ [23. 合并 K 个升序链表](https://leetcode.cn/problems/merge-k-sorted-lists/)
+
+### 优先级队列
+
+- 不用指定队列长度
+
+```java
+public ListNode mergeKLists(ListNode[] lists) {
+  ListNode sentinel = new ListNode(-999, null);
+  // 记录新链表的尾巴
+  ListNode p = sentinel;
+  PriorityQueue<ListNode> minHeap = new PriorityQueue<ListNode>((a, b) -> a.val - b.val);
+  // 第一次放入
+  for (ListNode node : lists) {
+      if (node != null) {
+          minHeap.offer(node);
+      }
+  }
+
+  // 当小顶堆有元素时
+  while (!minHeap.isEmpty()) {
+      ListNode poll = minHeap.poll();
+      if (poll.next != null) { // 退出来的元素有后继，后继入队
+          minHeap.offer((poll.next));
+      }
+      // 尾插，并移动结果的尾指针
+      p.next = poll;
+      poll.next = null;
+      p = poll;
+  }
+  return sentinel.next;
+}
+```
+
+
+
 ## 回文
 
 ### 😎[125. 验证回文串](https://leetcode.cn/problems/valid-palindrome/)
