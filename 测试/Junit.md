@@ -1018,8 +1018,6 @@ public class CarServiceTest {
 </project>
 ```
 
-![image-20220830232336183](https://erick-typora-image.oss-cn-shanghai.aliyuncs.com/img/image-20220830232336183.png)
-
 ## 1. 入门案例
 
 ```bash
