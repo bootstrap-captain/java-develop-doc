@@ -1,3 +1,38 @@
+## 😎[415. 字符串相加](https://leetcode.cn/problems/add-strings/)
+
+- 短的数字用0补，注意进位
+- 利用StringBuilder来进行拼劲，最后反转即可
+
+```java
+public String addStrings(String num1, String num2) {
+        char[] chs1 = num1.toCharArray();
+        char[] chs2 = num2.toCharArray();
+
+        StringBuilder sb = new StringBuilder();
+        int p1 = chs1.length - 1;
+        int p2 = chs2.length - 1;
+
+        int leftOver = 0;
+
+        while (p1 >= 0 || p2 >= 0) {
+            int ch1 = p1 >= 0 ? (chs1[p1]) - '0' : 0; // 注意这个转换
+            int ch2 = p2 >= 0 ? (chs2[p2]) - '0' : 0;
+            int sum = ch1 + ch2 + leftOver;
+            sb.append(sum % 10);
+            leftOver = (ch1 + ch2 + leftOver) / 10;
+
+            p1--;
+            p2--;
+        }
+
+        if (leftOver == 1) {
+            sb.append(1);
+        }
+
+        return sb.reverse().toString();
+    }
+```
+
 ## 回文
 
 ### 😎[125. 验证回文串](https://leetcode.cn/problems/valid-palindrome/)

@@ -1406,3 +1406,97 @@ public static Set<BeanDefinitionHolder> registerAnnotationConfigProcessors(
 ![AutowiredAnnotationBeanPostProcessor](https://erick-typora-image.oss-cn-shanghai.aliyuncs.com/img/AutowiredAnnotationBeanPostProcessor.png)
 
 ![image-20230601150622253](https://erick-typora-image.oss-cn-shanghai.aliyuncs.com/img/image-20230601150622253.png)
+
+#### 注解注册bean原理
+
+- 一个类上加载了自定义注解，那么就将该类放在容器中
+
+```xml
+<dependency>
+    <groupId>org.reflections</groupId>
+    <artifactId>reflections</artifactId>
+    <version>0.10.2</version>
+</dependency>
+```
+
+```java
+package com.erick.annotation;
+
+import java.lang.annotation.*;
+
+@Target(ElementType.TYPE) // 作用在类上
+@Retention(RetentionPolicy.RUNTIME)
+@Documented
+public @interface ErickComponent {
+}
+```
+
+```java
+package com.erick;
+
+import com.erick.annotation.ErickComponent;
+
+@ErickComponent(beanName = "awsService")
+public class AwsService {
+}
+```
+
+```java
+package com.erick.util;
+
+import com.erick.annotation.ErickComponent;
+import org.reflections.Reflections;
+
+import java.util.HashMap;
+import java.util.Map;
+import java.util.Set;
+
+public class ScanAnnotationUtil {
+    public static Map<String, Class> scanPackage(String basePackage) {
+        final Map<String, Class> targetClass = new HashMap<>();
+        Reflections reflections = new Reflections(basePackage);
+        Set<Class<?>> result = reflections.getTypesAnnotatedWith(ErickComponent.class);
+        for (Class clazz : result) {
+            ErickComponent annotation = (ErickComponent) clazz.getAnnotation(ErickComponent.class);
+            String beanName = annotation.beanName();
+            targetClass.put(beanName, clazz);
+        }
+        return targetClass;
+    }
+}
+```
+
+```java
+package com.erick.processor;
+
+import com.erick.util.ScanAnnotationUtil;
+import org.springframework.beans.BeansException;
+import org.springframework.beans.factory.config.BeanDefinition;
+import org.springframework.beans.factory.config.ConfigurableListableBeanFactory;
+import org.springframework.beans.factory.support.BeanDefinitionRegistry;
+import org.springframework.beans.factory.support.BeanDefinitionRegistryPostProcessor;
+import org.springframework.beans.factory.support.GenericBeanDefinition;
+import org.springframework.context.annotation.Configuration;
+
+import java.util.Map;
+
+public class ErickBeanDefinitionRegistryPostProcessor implements BeanDefinitionRegistryPostProcessor {
+    @Override
+    public void postProcessBeanDefinitionRegistry(BeanDefinitionRegistry registry) throws BeansException {
+        Map<String, Class> classMap = ScanAnnotationUtil.scanPackage("com.erick");
+        classMap.forEach((beanName, clazz) -> {
+            GenericBeanDefinition beanDefinition = new GenericBeanDefinition();
+            beanDefinition.setBeanClass(clazz);
+            beanDefinition.setScope(BeanDefinition.SCOPE_SINGLETON);
+            registry.registerBeanDefinition(beanName, beanDefinition);
+        });
+    }
+
+    @Override
+    public void postProcessBeanFactory(ConfigurableListableBeanFactory beanFactory) throws BeansException {
+
+    }
+}
+```
+
+## 
