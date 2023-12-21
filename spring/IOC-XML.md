@@ -169,7 +169,7 @@ PostProcessorRegistrationDelegate --- invokeBeanFactoryPostProcessors()
 
 - spring回调该接口的方法，对BeanDefinition注册和修改
 - 按照xml中声明的顺序构建processor
-- 通过注解的话，如何处理顺序
+- 通过xml的话，如何处理顺序
 
 ![image-20231215143924243](https://erick-typora-image.oss-cn-shanghai.aliyuncs.com/img/image-20231215143924243.png)
 
@@ -426,7 +426,6 @@ public class PhoneFactory implements FactoryBean<ApplePhone> {
 # 依赖分类及注入：  调用有参数构造，完成属性的DI
 - 基础数据，String
 - POJO类型
-- 集合类： 一般不会用这种方式来进行构建
 ```
 
 ### 1.2 set方法
@@ -436,72 +435,150 @@ public class PhoneFactory implements FactoryBean<ApplePhone> {
 ```
 
 ```xml
-<bean id="cookingService" class="com.erick.CookingService">
-    <!--通过set方法来进行DI:
-          1.根据name名首字母大写，再拼接set字符串， 对应CookingService类中的方法名
-          2.将ref对应的值，赋值给形参(形参名是什么无所谓,形参只能包含一个)
-          3.通过反射调用set方法-->
-    <property name="dish" value="chicken"></property>
-    <property name="price" value="12"></property>
-    <property name="cooker" ref="erickCooker"></property>
-    <property name="random" value="520"></property>
+<bean id="snsService" class="com.erick.daydreamer.SnsService">
+ <!--通过name，首字母大写，再拼接set，匹配到对应的set方法名，并进行调用-->
+    <property name="address" value="shanxi"/>
+    <property name="region" value="china"/>
 </bean>
-
-<bean id="erickCooker" class="com.erick.Cooker"></bean>
 ```
 
 ```java
-package com.erick;
+package com.erick.daydreamer;
 
-public class CookingService {
-    private int price;
-    private String dish;
-    private Cooker cooker;
+public class SnsService {
+    private String region;
+    private String address;
 
-    public CookingService() {
+    public void setRegion(String region) {
+        System.out.println("region赋值");
+        this.region = region;
     }
 
-    public void setPrice(int price) {
-        this.price = price;
-    }
-
-    public void setDish(String dish) {
-        this.dish = dish;
-    }
-
-    public void setCooker(Cooker cooker) {
-        this.cooker = cooker;
-    }
-
-    public void setRandom(String address) {
-        System.out.println(address);
+    public void setAddress(String address) {
+        System.out.println("address赋值");
+        this.address = address;
     }
 }
 ```
 
-### 2.3 二者比较
+- set里面的属性信息，封装在beanDefinitionMap中
 
-```bash
-# constructor-arg
-- 有参构造中包含几个参数，就必须有几个constructor-arg
-- 对象一旦构建好，就是一个理论意义上的完整对象
+![image-20231220104353137](https://erick-typora-image.oss-cn-shanghai.aliyuncs.com/img/image-20231220104353137.png)
 
-# property
-- 对象构造完成后，再调用set方法来进行DI
-- 不需要和set方法数量一一对应
-- 构造的bean对象可能不完整
 
-# 除此之外，也可以暴力反射，对对应的field直接赋值
-- 此方法xml不支持
+
+## 2. Aware接口
+
+- 框架辅助属性注入的一种思想，其他框架也可以看到类似的接口
+- 框架的高度封装性，底层功能API不能轻易获取，但并不意味永远用不到这些对象，如果用到了，就可以使用框架提供的Aware接口
+
+### 2.1 BeanNameAware
+
+- 回调方法：setBeanName
+
+```xml
+<bean id="snsService" class="com.erick.daydreamer.SnsService">
+    <property name="address" value="shanxi"/>
+</bean>
 ```
 
+```java
+package com.erick.daydreamer;
 
+import org.springframework.beans.factory.BeanNameAware;
 
+public class SnsService implements BeanNameAware {
+    private String address;
 
+    /*set方法先执行*/
+    public void setAddress(String address) {
+        System.out.println("address赋值");
+        this.address = address;
+    }
 
+    /*aware后执行*/
+    @Override
+    public void setBeanName(String name) {
+        System.out.println("beanName:" + name);
+    }
+}
+```
 
+### 2.2 ApplicationContextAware
 
-## 3. 获取
+- springboot项目中，假如想获取到当前spring的容器，可以实现ApplicationContextAware接口
+
+```java
+package com.black.pearl.beanProxy;
+
+import org.springframework.beans.BeansException;
+import org.springframework.context.ApplicationContext;
+import org.springframework.context.ApplicationContextAware;
+import org.springframework.stereotype.Component;
+
+@Component
+public class CaptainContainerContextAware implements ApplicationContextAware {
+
+    /*spring-boot-container*/
+    private static ApplicationContext captainContainer;
+
+    /*call back method*/
+    @Override
+    public void setApplicationContext(ApplicationContext applicationContext) throws BeansException {
+        this.captainContainer = applicationContext;
+    }
+
+    /**
+     * provide access to non-spring class in spring-boot-application
+     *
+     * @return
+     */
+    public static ApplicationContext getCaptainContainer() {
+        return captainContainer;
+    }
+}
+```
+
+## 3. BeanPostProcessor-Before
+
+- Bean后置处理器，在Bean创建对象后(半成品对象)
+- BeanPostProcessor的对应的实现类来处理Bean，需要交给spring接管来调用
+
+```java
+package com.erick.daydreamer;
+
+import org.springframework.beans.BeansException;
+import org.springframework.beans.factory.config.BeanPostProcessor;
+
+public class ErickBeanPostProcessor implements BeanPostProcessor {
+
+    @Override
+    public Object postProcessBeforeInitialization(Object bean, String beanName) throws BeansException {
+        if (bean instanceof SnsService) {
+            // 可以修改bean的属性 
+            ((SnsService) bean).setAddress("janpan");
+            System.out.println("BeanPostProcessor---postProcessBeforeInitialization: " + beanName);
+        }
+        return bean;
+    }
+}
+```
+
+## 4. InitializingBean接口
+
+## 5. Bean的init
+
+## 6. BeanPostProcessor-After
+
+## 7. 进入单例池
+
+## 总结
+
+![image-20230530203711146](https://erick-typora-image.oss-cn-shanghai.aliyuncs.com/img/image-20230530203711146.png)
+
+# 使用
+
+## 1. 获取
 
 ```bash
 # ID
@@ -565,7 +642,7 @@ public class Test02 {
 }
 ```
 
-## 4. lazy-init
+## 2. lazy-init
 
 - ApplicationContext：容器初始化后，就会加载所有定义的Bean并放在容器中，lazy-init可以使当前bean的初始化被延迟到getBean
 - 对于Beanfactory无效，因为BeanFactory本身就是getBean时候才会加载
@@ -575,7 +652,7 @@ public class Test02 {
 <bean id="first_bank_service" class="com.erick.BankService" lazy-init="true"></bean>
 ```
 
-## 5. scope
+## 3. scope
 
 ```bash
 # 1. 在基本的spring环境:  spring-context
@@ -597,7 +674,7 @@ request, session
 <bean id="awsService" class="com.erick.AwsService" scope="prototype"></bean>
 ```
 
-## 6. profile
+## 4. profile
 
 - 类似springboot的不同配置文件
 
@@ -629,11 +706,9 @@ request, session
 - Java代码：         System.setProperty("spring.profiles.active", "test");
 ```
 
-# 生命周期
+# 引用依赖
 
-
-
-#### 单向引用
+## 1. 单向引用
 
 - 如果A-Bean的setter对应的属性，依赖于B-Bean，但B-Bean并不会依赖A-Bean
 - 则先暂停A的属性填充(A不会放在容器中)，先去初始化B
@@ -673,7 +748,7 @@ class SecondService {
 <bean id="secondService" class="com.erick.SecondService"></bean>
 ```
 
-#### 循环引用
+## 2. 循环引用
 
 - 循环引用只能存在于通过set方法来进行属性填充的情况
 - 构造器属性填充(强依赖)一旦循环依赖，则立马报错
@@ -722,90 +797,9 @@ private final Map<String, ObjectFactory<?>> singletonFactories = new HashMap<>(1
 
 ![image-20230530170355077](https://erick-typora-image.oss-cn-shanghai.aliyuncs.com/img/image-20230530170355077.png)
 
-### 3.2 Aware接口
-
-- 框架辅助属性注入的一种思想，其他框架也可以看到类似的接口
-- 框架的高度封装性，底层功能API不能轻易获取，但并不意味永远用不到这些对象，如果用到了，就可以使用框架提供的Aware接口，让框架给我们注入该对象(可以由对应的Bean来实现)
-
-| Aware接口               | 回调方法                                                     | 作用                                     |
-| ----------------------- | ------------------------------------------------------------ | ---------------------------------------- |
-| ApplicationContextAware | void setApplicationContext(ApplicationContext applicationContext) throws BeansException; | spring框架获取到当前对象                 |
-| BeanNameAware           | void setBeanName(String name);                               | spring框架注入当前Bean在容器中的beanName |
-
-![image-20230530171706707](https://erick-typora-image.oss-cn-shanghai.aliyuncs.com/img/image-20230530171706707.png)
-
-#### BeanNameAware
-
-```xml
-<bean id="snsService" class="com.erick.SnsService">
-    <property name="XXXAddress" value="beijing"></property>
-</bean>
-```
-
-```java
-package com.erick;
-
-import org.springframework.beans.factory.BeanNameAware;
-
-public class SnsService implements BeanNameAware {
-
-    private String address;
-
-    /*先执行*/
-    public void setXXXAddress(String address) {
-        System.out.println("address属性注入");
-        this.address = address;
-    }
-
-    /*后执行：不用在xml中配置属性注入，会自动回调*/
-    @Override
-    public void setBeanName(String name) {
-        System.out.println("BeanName是：" + name);
-    }
-}
-```
-
-#### ApplicationContextAware
-
-- springboot项目中，假如想获取到当前spring的容器，可以实现ApplicationContextAware接口
-
-```java
-package com.black.pearl.beanProxy;
-
-import org.springframework.beans.BeansException;
-import org.springframework.context.ApplicationContext;
-import org.springframework.context.ApplicationContextAware;
-import org.springframework.stereotype.Component;
-
-@Component
-public class CaptainContainerContextAware implements ApplicationContextAware {
-
-    /*spring-boot-container*/
-    private static ApplicationContext captainContainer;
-
-    /*call back method*/
-    @Override
-    public void setApplicationContext(ApplicationContext applicationContext) throws BeansException {
-        this.captainContainer = applicationContext;
-    }
-
-    /**
-     * provide access to non-spring class in spring-boot-application
-     *
-     * @return
-     */
-    public static ApplicationContext getCaptainContainer() {
-        return captainContainer;
-    }
-}
-```
 
 
 
-### 3.3. BeanPostProcessor-Before
-
-- Bean后置处理器，在Bean创建对象后(半成品对象)
-- BeanPostProcessor的对应的实现类来处理Bean，需要交给spring接管来调用
 
 ```java
 package com.erick.processor;
@@ -834,22 +828,4 @@ public class ErickBeanPostProcessor implements  {
     }
 }
 ```
-
-### 3.4 InitializingBean接口初始化
-
-- afterPropertiesSet
-
-### 3.5 Bean的init
-
-### 3.6. BeanPostProcessor-After
-
-### 3.7 进入单例池
-
-### 总结
-
-![image-20230530203711146](https://erick-typora-image.oss-cn-shanghai.aliyuncs.com/img/image-20230530203711146.png)
-
-生命周期
-
-- 通过反射到创建出对象后，一直到Bean成为一个完整的对象，最终存储到单例池中的过程
 
