@@ -155,29 +155,6 @@ private LinkedList<Character> getResult(String str) {
 }
 ```
 
-
-
-## [1. 两数之和](https://leetcode.cn/problems/two-sum/)
-
-### Hash
-
-```java
-public int[] twoSum(int[] nums, int target) {
-    int[] arr = new int[2];
-    Map<Integer, Integer> hash = new HashMap<>();
-    for (int i = 0; i < nums.length; i++) {
-        if (hash.containsKey(target - nums[i])) {
-            arr[0] = i;
-            arr[1] = hash.get(target - nums[i]);
-            return arr;
-        }
-
-        hash.put(nums[i], i);
-    }
-    return arr;
-}
-```
-
 ## [268. 丢失的数字](https://leetcode.cn/problems/missing-number/)
 
 ### Hash
@@ -286,60 +263,6 @@ public void merge(int[] nums1, int m, int[] nums2, int n) {
             nums1[i] = nums2[i];
         }
     }
-}
-```
-
-## [3. 无重复字符的最长子串](https://leetcode.cn/problems/longest-substring-without-repeating-characters/)
-
-###  Hash去重+删除
-
-```java
-public int lengthOfLongestSubstring(String s) {
-    int max = 0;
-    char[] chars = s.toCharArray();
-    Map<Character, Integer> hash = new HashMap<>();
-    for (int i = 0; i < chars.length; i++) {
-        if (hash.containsKey(chars[i])) {
-            emptyBefore(hash, hash.get(chars[i])); // 清空之前的数据
-        }
-        hash.put(chars[i], i);
-        max = Math.max(max, hash.size()); // 每次添加一个都更新一次
-    }
-    return max;
-}
-
-private void emptyBefore(Map<Character, Integer> hash, int index) {
-    Iterator<Map.Entry<Character, Integer>> iterator = hash.entrySet().iterator();
-    while (iterator.hasNext()) {
-        Map.Entry<Character, Integer> entry = iterator.next();
-        if (entry.getValue() <= index) {
-            iterator.remove();
-        }
-    }
-}
-```
-
-### Hash去重+有效标记
-
-- 效率相比删除更高
-
-```java
-public int lengthOfLongestSubstring(String s) {
-    int max = 0;
-    int startPoint = 0;
-    char[] chars = s.toCharArray();
-    Map<Character, Integer> hash = new HashMap<>();
-
-    for (int i = 0; i < chars.length; i++) {
-        if (hash.containsKey(chars[i]) && hash.get(chars[i]) >= startPoint) {  // abba
-            Integer index = hash.get(chars[i]);
-            startPoint = index + 1;
-        }
-        hash.put(chars[i], i);
-        max = Math.max(max, (i - startPoint + 1));
-    }
-
-    return max;
 }
 ```
 
@@ -456,36 +379,6 @@ public List<List<String>> groupAnagrams(String[] strs) {
 }
 ```
 
-## [349. 两个数组的交集](https://leetcode.cn/problems/intersection-of-two-arrays/)
-
-### Hash
-
-```java
-public int[] intersection(int[] nums1, int[] nums2) {
-    Set<Integer> result = new HashSet<>();
-    // 数组1去重
-    Set<Integer> set1 = new HashSet<>();
-    for (int num : nums1) {
-        set1.add(num);
-    }
-
-    // 数组2判断: 添加结果集中，去重
-    for (int num : nums2) {
-        if (set1.contains(num)) {
-            result.add(num);
-        }
-    }
-
-    int[] arr = new int[result.size()];
-    int i = 0;
-    for (Integer el : result) {
-        arr[i] = el;
-        i++;
-    }
-    return arr;
-}
-```
-
 ## [387. 字符串中的第一个唯一字符](https://leetcode.cn/problems/first-unique-character-in-a-string/)
 
 ### Hash
@@ -533,39 +426,6 @@ public int firstUniqChar(String s) {
         }
     }
     return -1;
-}
-```
-
-## [217. 存在重复元素](https://leetcode.cn/problems/contains-duplicate/)
-
-### Hash
-
-```java
-public boolean containsDuplicate(int[] nums) {
-    Set<Integer> hash = new HashSet<>();
-    for (Integer el : nums) {
-        if (!hash.add(el)) {
-            return true;
-        }
-    }
-    return false;
-}
-```
-
-## [219. 存在重复元素 II](https://leetcode.cn/problems/contains-duplicate-ii/)
-
-```java
-public boolean containsNearbyDuplicate(int[] nums, int k) {
-    Map<Integer, Integer> hash = new HashMap<>();
-    for (int i = 0; i < nums.length; i++) {
-        if (hash.containsKey(nums[i])) {
-            if (i - hash.get(nums[i]) <= k) {
-                return true;
-            }
-        }
-        hash.put(nums[i], i);
-    }
-    return false;
 }
 ```
 
