@@ -728,6 +728,7 @@ public class AServiceTest {
 - mockito core 3.4以上，支持对静态方法的测试
 - 如果一个方法里面调用了静态方法，可以对静态方法进行mock结果，验证可以通过正常断言或者静态方法被调用次数
 - 但是打桩的类，就不是代理类了，但是功能还是正常的
+- mock的对应的对象，是全局的。结束后对该静态方法的类关闭，否则可能影响到其他使用该类
 
 ```xml
 <!--mockito-inline: 支持静态方法的mock-->
@@ -765,7 +766,6 @@ public class CarService {
 ### UT
 
 ```java
-
 public class CarServiceTest {
 
     private CarService carService = new CarService();
@@ -773,6 +773,7 @@ public class CarServiceTest {
     @Test
     public void testCarJump() {
         // mock static method
+        // 会关闭掉mockStatic的对象
         try (MockedStatic<ErickUtil> mockErickUtil = Mockito.mockStatic(ErickUtil.class)) {
             // 跳过static的方法调用,不要激活静态方法
             mockErickUtil.when(ErickUtil::jump).then(invocationOnMock -> null);
@@ -958,6 +959,67 @@ public class CarServiceTest {
 ```
 
 ## 1. @Spy
+
+
+
+# Mockito -verify
+
+## 1. 调用次数
+
+- A-Service调用B-Service的方法，假如B-Service没有返回值，则不确定是否被调用
+
+### SRC
+
+```java
+public class PhoneService {
+
+    public void work(String brand, String type) {
+        System.out.println(brand);
+        System.out.println(type);
+    }
+}
+```
+
+```java
+public class PhoneController {
+    @Setter
+    private PhoneService phoneService;
+
+
+    public void callService() {
+        String type = "iphone";
+        String brand = "apple";
+        phoneService.work(type, brand);
+        phoneService.work(type, brand);
+    }
+}
+```
+
+### UT
+
+```java
+public class PhoneControllerTest {
+
+    private PhoneController controller = new PhoneController();
+
+    @Mock
+    private PhoneService phoneService;
+
+    @BeforeEach
+    void init() {
+        MockitoAnnotations.openMocks(this);
+        controller.setPhoneService(phoneService);
+    }
+
+    @Test
+    void callServiceTest() {
+        controller.callService();
+        Mockito.verify(phoneService, Mockito.times(2)).work(Mockito.any(), Mockito.any());
+    }
+}
+```
+
+
 
 # SpringBoot-Mockito
 
