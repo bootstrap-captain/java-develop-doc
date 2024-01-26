@@ -1,37 +1,32 @@
-## 😎[415. 字符串相加](https://leetcode.cn/problems/add-strings/)
+## 😎 [167. 两数之和 II - 输入有序数组](https://leetcode.cn/problems/two-sum-ii-input-array-is-sorted/)
 
-- 短的数字用0补，注意进位
-- 利用StringBuilder来进行拼劲，最后反转即可
+### 双指针
 
 ```java
-public String addStrings(String num1, String num2) {
-        char[] chs1 = num1.toCharArray();
-        char[] chs2 = num2.toCharArray();
-
-        StringBuilder sb = new StringBuilder();
-        int p1 = chs1.length - 1;
-        int p2 = chs2.length - 1;
-
-        int leftOver = 0;
-
-        while (p1 >= 0 || p2 >= 0) {
-            int ch1 = p1 >= 0 ? (chs1[p1]) - '0' : 0; // 注意这个转换
-            int ch2 = p2 >= 0 ? (chs2[p2]) - '0' : 0;
-            int sum = ch1 + ch2 + leftOver;
-            sb.append(sum % 10);
-            leftOver = (ch1 + ch2 + leftOver) / 10;
-
-            p1--;
-            p2--;
+public int[] twoSum(int[] numbers, int target) {
+    int left = 1;
+    int right = numbers.length;
+    while (left < right) {
+        int sum = numbers[left - 1] + numbers[right - 1];
+        if (sum == target) {
+            return new int[]{left, right};
+        } else if (sum < target) {
+            left++;
+        } else {
+            right--;
         }
-
-        if (leftOver == 1) {
-            sb.append(1);
-        }
-
-        return sb.reverse().toString();
     }
+    return null;
+}
 ```
+
+
+
+
+
+
+
+# Left
 
 ## 回文
 
@@ -152,280 +147,6 @@ private LinkedList<Character> getResult(String str) {
         }
     }
     return stack;
-}
-```
-
-## [268. 丢失的数字](https://leetcode.cn/problems/missing-number/)
-
-### Hash
-
-```java
-public int missingNumber(int[] nums) {
-    Set<Integer> hash = new HashSet<>();
-    for (Integer num : nums) {
-        hash.add(num);
-    }
-    // 从0-n检查
-    for (int i = 0; i <= nums.length; i++) {
-        if (!hash.contains(i)) {
-            return i;
-        }
-    }
-    return -1;
-}
-```
-
-### 总数和
-
-```java
-/*  n个元素的题目要求的总数和：
- [0]:   1
- [0,1]: 3
- [0,1]的是3 [0,1,2]=6*/
-public int missingNumber(int[] nums) {
-    int sum = nums.length * (nums.length + 1) / 2;
-    for (int num : nums) {
-        sum = sum - num;
-    }
-    return sum;
-}
-```
-
-## [136. 只出现一次的数字](https://leetcode.cn/problems/single-number/)
-
-### Hash
-
-```java
-public int singleNumber(int[] nums) {
-    Map<Integer, Integer> hash = new HashMap<>();
-    for (int i = 0; i < nums.length; i++) {
-        if (hash.containsKey(nums[i])) {
-            hash.put(nums[i], -1); // 重复则置为-1
-        } else {
-            hash.put(nums[i], 1);
-        }
-    }
-
-    for (Map.Entry<Integer, Integer> entry: hash.entrySet()){
-        if (entry.getValue()==1){
-            return entry.getKey();
-        }
-    }
-
-    return 0;
-}
-```
-
-### 按位异或
-
-- 任何数字和其本身异或，结果为0
-- 任何数字和0异或，结果为其本身
-- 和顺序无关
-
-```java
-public int singleNumber(int[] nums) {
-    int result = 0;
-    for (int num : nums) {
-        result = result ^ num;
-    }
-    return result;
-}
-```
-
-
-
-## [88. 合并两个有序数组](https://leetcode.cn/problems/merge-sorted-array/)
-
-### 逆向双指针
-
-- 逆序从大到小
-- 谁大就放在数组1的最右边
-
-```java
-public void merge(int[] nums1, int m, int[] nums2, int n) {
-    int p = nums1.length - 1;
-    int p1 = m - 1;
-    int p2 = n - 1;
-    while (p1 >= 0 && p2 >= 0) {
-        if (nums1[p1] < nums2[p2]) {
-            nums1[p] = nums2[p2];
-            p2--;
-        } else {
-            nums1[p] = nums1[p1];
-            p1--;
-        }
-        p--;
-    }
-    /*数组2不为空：复制
-     * 数组1不为空：不用做*/
-    if (p1 < 0) {
-        for (int i = 0; i < p2 + 1; i++) {
-            nums1[i] = nums2[i];
-        }
-    }
-}
-```
-
-## [242. 有效的字母异位词](https://leetcode.cn/problems/valid-anagram/)
-
-- 一般先将字符转换为数组，不用使用 s.charAt(i)
-- 遇见字母都是小写，可以考虑长度为26的Charactor数组
-
-### 字母重排
-
-```java
-public boolean isAnagram(String s, String t) {
-    char[] ch1 = s.toCharArray();
-    char[] ch2 = t.toCharArray();
-    Arrays.sort(ch1);
-    Arrays.sort(ch2);
-    return new String(ch1).equals(new String(ch2));
-}
-```
-
-### 26数组
-
-```java
-public boolean isAnagram(String s, String t) {
-    int[] first = get(s);
-    int[] second = get(t);
-    for (int i = 0; i < first.length; i++) {
-        if (first[i] != second[i]) {
-            return false;
-        }
-    }
-    return true;
-}
-
-private int[] get(String str) {
-    int[] arr = new int[26];
-    char[] chars = str.toCharArray();
-    for (int i = 0; i < chars.length; i++) {
-        int ch = chars[i]; // 转int
-        arr[ch - 97]++;    // 97
-    }
-    return arr;
-}
-```
-
-## [49. 字母异位词分组](https://leetcode.cn/problems/group-anagrams/)
-
-### Hash+排序数组
-
-```java
-public List<List<String>> groupAnagrams(String[] strs) {
-    Map<String, List<String>> hash = new HashMap<>();
-    for (int i = 0; i < strs.length; i++) {
-        String str = strs[i];
-        char[] chs = str.toCharArray();
-        Arrays.sort(chs);
-        String newStr = new String(chs);
-        if (hash.containsKey(newStr)) {
-            hash.get(newStr).add(str);
-        } else {
-            ArrayList<String> sub = new ArrayList<>();
-            sub.add(str);
-            hash.put(newStr, sub);
-        }
-    }
-    return new ArrayList<>(hash.values());
-}
-```
-
-### Hash+26数组
-
-```java
-class PArray {
-    int[] arr = new int[26];
-
-    @Override
-    public boolean equals(Object o) {
-        if (this == o) return true;
-        if (o == null || getClass() != o.getClass()) return false;
-        PArray pArray = (PArray) o;
-        return Arrays.equals(arr, pArray.arr);
-    }
-
-    @Override
-    public int hashCode() {
-        return Arrays.hashCode(arr);
-    }
-
-    public void convertStrToArray(String str) {
-        char[] chs = str.toCharArray();
-        for (int i = 0; i < chs.length; i++) {
-            int ch = chs[i];
-            arr[ch - 97]++;
-        }
-    }
-}
-
-public List<List<String>> groupAnagrams(String[] strs) {
-    Map<PArray, List<String>> hash = new HashMap<>();
-    for (int i = 0; i < strs.length; i++) {
-        String str = strs[i];
-        PArray pArray = new PArray();
-        pArray.convertStrToArray(str);
-
-        if (hash.containsKey(pArray)) {
-            hash.get(pArray).add(str);
-        } else {
-            ArrayList<String> sub = new ArrayList<>();
-            sub.add(str);
-            hash.put(pArray, sub);
-        }
-    }
-    return new ArrayList<>(hash.values());
-}
-```
-
-## [387. 字符串中的第一个唯一字符](https://leetcode.cn/problems/first-unique-character-in-a-string/)
-
-### Hash
-
--  重复元素的value为-1
-- 第一个元素，通过遍历字符串得到
-
-```java
-public int firstUniqChar(String s) {
-    Map<Character, Integer> hash = new HashMap<>();
-    char[] chs = s.toCharArray();
-    for (int i = 0; i < chs.length; i++) {
-        if (hash.containsKey(chs[i])) {
-            hash.put(chs[i], -1);
-        } else {
-            hash.put(chs[i], i);
-        }
-    }
-
-    for (int i = 0; i < chs.length; i++) {
-        int value = hash.get(chs[i]);
-        if (value != -1) {
-            return value;
-        }
-    }
-    return -1;
-}
-```
-
-### 26数组
-
-- 可以通过计算'a'的方式
-
-```java
-public int firstUniqChar(String s) {
-    int[] arr = new int[26];
-    char[] chs = s.toCharArray();
-    for (int i = 0; i < chs.length; i++) {
-        arr[chs[i] - 'a']++;
-    }
-
-    for (int i = 0; i < chs.length; i++) {
-        if (arr[chs[i] - 'a'] == 1) {
-            return i;
-        }
-    }
-    return -1;
 }
 ```
 
