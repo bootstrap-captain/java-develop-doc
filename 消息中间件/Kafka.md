@@ -8,21 +8,18 @@
 
 ## 1. 消费模式
 
-### 1.1 点对点
+### 1.1 点对点-Queue
 
-- Queue
 - Consumer主动拉取数据，消息收到后清除
 
 ![image-20220906163748988](https://erick-typora-image.oss-cn-shanghai.aliyuncs.com/img/image-20220906163748988.png)
 
-### 1.2 发布订阅
+### 1.2 发布订阅-Topic
 
-- Topic
 - 多个Consumer相互独立，都可以获取到数据
 - Consumer消费数据后，不会删除数据，默认有消息过期时间
-- 一个消息中间件包含多个不同的topic
 
-![image-20220906164443141](https://erick-typora-image.oss-cn-shanghai.aliyuncs.com/img/image-20220906164443141.png)
+![image-20240226152702131](https://erick-typora-image.oss-cn-shanghai.aliyuncs.com/img/image-20240226152702131.png)
 
 ## 2. 基础架构
 
@@ -58,16 +55,14 @@
 ## 1. 启动zookeeper
 
 ```bash
-# 1. 在服务器120.79.28.20上安装zookeeper
+# 1. 在服务器上47.93.216.235安装zookeeper    8G内存
 docker pull zookeeper:3.8
-docker run --name zookeeper -p 2181:2181 --restart always -d 3fae25920878 
+docker run --name zookeeper -p 2181:2181 --restart always -d 1530b1a1b069 
 ```
 
+## 2. Kafka集群安装
 
-
-## 2. kafka集群安装
-
-- 按照相同步骤，部署启动三台kafka，只要保证对应的broker.id不同即可，本文分别为111， 222， 333
+- 相同步骤，部署三台kafka，但保证对应的broker.id不同即可，本文分别为111， 222， 333
 
 ### 2.1 安装
 
@@ -79,7 +74,7 @@ docker run --name zookeeper -p 2181:2181 --restart always -d 3fae25920878
 
 ### 2.2 上传
 
-- kafka的运行需要有java环境，选择安装java17
+- Kafka的运行需要有java环境，选择安装java17
 - 阿里云服务器     39.106.78.92,      39.105.127.52,   39.105.26.134
 
 ```bash
@@ -105,7 +100,7 @@ site-docs
 
 ### 2.3 修改配置文件
 
-- 进入 /usr/local/kafka/kafka_2.12-3.2.1/config
+- /usr/local/kafka/kafka_2.12-3.2.1/config
 - server.properties： 该台kafka server端对应的参数
 
 ```bash
@@ -120,7 +115,7 @@ log.dirs=/usr/local/kafka/data
 # 外部访问时候的ip和端口，对应的ip为本机的ip
 advertised.listeners=PLAINTEXT://120.77.156.53:9092
 
-# zookeeper的配置
+# zookeeper的配置：zookeeper的ip和端口
 zookeeper.connect=120.79.28.20:2181
 ```
 
