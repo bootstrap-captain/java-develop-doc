@@ -55,9 +55,9 @@
 ## 1. 启动zookeeper
 
 ```bash
-# 1. 在服务器上47.93.216.235安装zookeeper    8G内存
+# 1. 在服务器上118.31.244.78安装zookeeper    8G内存
 docker pull zookeeper:3.8
-docker run --name zookeeper -p 2181:2181 --restart always -d 1530b1a1b069 
+docker run --privileged --name zookeeper -p 2181:2181 --restart always -d 1530b1a1b069 
 ```
 
 ## 2. Kafka集群安装
@@ -75,7 +75,7 @@ docker run --name zookeeper -p 2181:2181 --restart always -d 1530b1a1b069
 ### 2.2 上传
 
 - Kafka的运行需要有java环境，选择安装java17
-- 阿里云服务器     39.106.78.92,      39.105.127.52,   39.105.26.134
+- 阿里云服务器     39.105.210.163,  118.31.238.79，120.26.118.233
 
 ```bash
 # 第一台服务器
@@ -83,7 +83,7 @@ cd usr/local
 mkdir kafka
 
 # 1. 上传文件并解压
-put put /Users/shuzhan/Desktop/kafka_2.12-3.2.1.tgz /usr/local/kafka
+put /Users/shuzhan/Desktop/kafka_2.12-3.2.1.tgz /usr/local/kafka
 tar -zxvf kafka_2.12-3.2.1.tgz
 ```
 
@@ -100,7 +100,7 @@ site-docs
 
 ### 2.3 修改配置文件
 
-- /usr/local/kafka/kafka_2.12-3.2.1/config
+- /usr/local/kafka/kafka_2.12-3.2.1/config: Kafak的的所有的配置文件
 - server.properties： 该台kafka server端对应的参数
 
 ```bash
@@ -116,7 +116,7 @@ log.dirs=/usr/local/kafka/data
 advertised.listeners=PLAINTEXT://120.77.156.53:9092
 
 # zookeeper的配置：zookeeper的ip和端口
-zookeeper.connect=120.79.28.20:2181
+zookeeper.connect=118.31.244.78:2181
 ```
 
 ### 2.4 环境变量
@@ -155,15 +155,16 @@ jps
 
 ```bash
 # 1. producer
-- Interceptors-拦截器： 拦截消息，进行一些过滤，可以自定义，一般不使用
+- Interceptors-拦截器：  拦截消息，进行一些过滤，可以自定义，一般不使用
 - Serializer-序列化器：  跨节点通讯，不用java自带的序列化， 采用轻量级序列化，避免序列化信息太多引发数据过大
 - Partitioner-分区器：  决定数据应该存放在哪个分区
 
 # 2. RecordAccumulator: 缓存队列 
-- batch.size: 数据会以批次的形式进行发送
+# 两个条件只要达到一个就会被拉取
+- batch.size: 数据以批次的形式进行发送
               当数据积累到batch.size后，sender才会拉取数据，默认 16k
-- linger.ms:  如果数据迟迟没有达到batch size， 等到linger.ms的时间后，sender也会将数据拉取
-              单位为ms，默认是0ms，即无延迟发送，但是效率较低       
+- linger.ms:  如果数据迟迟没有达到batch size， 等到linger.ms时间后，sender也会将数据拉取
+              单位为ms，默认0ms，即无延迟发送，但效率较低       
             
 # 3. Sender-Thread
 - NetworkClient: 负责拉取数据发往kafka server
@@ -171,7 +172,7 @@ jps
 - 发送失败，会进行重试，默认为int的最大次数
 
 # 4. Selector
-- Selector将数据发送到对应的broker的对应partition
+- 将数据发送到对应的broker的对应partition
 - 集群收取到数据后，会进行leader-follower之间同步， 再进行应答
 - 应答成功后，会将数据的request从Sender中删除，将对应的消息从Dqueue中删除
 - 如果应答失败，则触发重试机制，会继续将Request进行重试， 重试默认次数为int的最大值
@@ -200,6 +201,10 @@ producer.send(new ProducerRecord(topicName, partition, key, value)).get();
 # key, value
 - key和value可以为任意类型的数据
 - key可以不存在，value必须存在
+
+# memory pool
+- Dequeue从memory pool中申请内存
+- 数据发送成功后，Dequeue的内存再还回到memory pool中
 ```
 
 ![](https://erick-typora-image.oss-cn-shanghai.aliyuncs.com/img/image-20220909110349719.png)
@@ -216,8 +221,8 @@ producer.send(new ProducerRecord(topicName, partition, key, value)).get();
 - 合理控制分区的任务，可以实现负载均衡
 
 # 2. 提高并行度
-- 生产者可以以分区为单位发送数据
-- consumer可以以分区为单位消费数据
+- producer: 可以以分区为单位发送数据
+- consumer: 可以以分区为单位消费数据
 ```
 
 ![image-20220909150030293](https://erick-typora-image.oss-cn-shanghai.aliyuncs.com/img/image-20220909150030293.png)
@@ -243,17 +248,15 @@ producer.send(new ProducerRecord(topicName, partition, key, value)).get();
 - 过滤脏数据
 ```
 
-
-
-## 4. 性能调优
+# Produce-性能
 
 - 参数可以在配置文件中调节作为全局配置， 也可以在代码端调节作为局部配置
 
-### 4.1 吞吐量
+## 1 吞吐量
+
+- batch.size和linger.ms满足其中一个, sender-thread 就可以从RecordAccumulattor 发送到cluster
 
 ```bash
-# batch.size和linger.ms满足其中一个, sender-thread 就可以从RecordAccumulattor 发送到cluster
-
 # 实时性 vs 高性能
 - batch.size: 批次大小，默认为16k
 - linger.ms: 等待时间， 单位为ms，默认0ms
@@ -267,9 +270,9 @@ RecordAccumulator: 默认为32M
 
 ![image-20220906171442070](https://erick-typora-image.oss-cn-shanghai.aliyuncs.com/img/image-20220906171442070.png)
 
-### 4.2 可靠性
+## 2. 可靠性
 
-#### ACK
+### 2.1 ACK
 
 ![image-20220909155828011](https://erick-typora-image.oss-cn-shanghai.aliyuncs.com/img/image-20220909155828011.png)
 
@@ -280,119 +283,147 @@ RecordAccumulator: 默认为32M
 - producer发送完，leader还未落盘，leader挂了，数据压根没有发送过去
 
 # 1： 普通日志，允许丢部分数据
-- producer发送数据，leader收到数据后应答
+- producer发送数据，leader收到数据落盘并应答
 
 - producer发送完，leader收到数据落盘并应答
 - leader还未完成同步，挂了，其他follower成为新的leader后，并没有之前数据
 
 # -1， all： 金融类场景
 - 生产者发送过来的数据，leader和所有的follower都收到后，才进行答复
-
-- producer发送完，leader收到数据落盘，且其他follower同步完成
 ```
 
-#### 动态ISR
+### 2.2 动态ISR
 
 - ACK为-1时，假如一个follower因为网络问题，迟迟不能应答，ACK动作一直不能完成
-
-```bash
-# IST:  in-sync replcaition set
-- leader维护了一个 和leader保持同步的Follower+Leader集合(leader:0, isr: 0,1,2)
-- 如果follwer长时间未向leader发送通信请求或同步数据，该follower将被踢出ISR， (leader:0, isr: 0,1)
-- replica.lag.time.max.ms:      默认为30s  
-```
-
-#### 可靠性
-
 - 分区副本： 指的是leader和follower的集合
 
 ```bash
-# 可靠性保证： 数据一定能发送成功
-- ACK级别为-1  +  分区副本数大于等于2    +  ISR里应答的最小副本数量大于等于2
-- 分区副本： 包含leader和follower
+# ISR:  in-sync replcaition set
+- Leader维护了一个 和Leader保持同步的Follower+Leader集合      (Leader:0, ISR: 0,1,2)
+
+- 如果Follwer长时间未向leader发送通信请求或同步数据，该Follower将被踢出ISR， (Leader:0, ISR: 0,1)
+
+# 参数
+- replica.lag.time.max.ms:      默认为30s  
 ```
+
+### 2.3 可靠性
+
+- 可靠性保证： 数据一定能发送成功
+- 建立在ACK=-1的基础上
+
+#### 分区副本=1
+
+- 就是只有一个Leader，不包含Follower了
+- Leader挂了后，就不能获取数据了
+
+![image-20240311112546371](https://erick-typora-image.oss-cn-shanghai.aliyuncs.com/img/image-20240311112546371.png)
+
+#### ISR中应答的最小副本数量=1
 
 ```bash
-# ack=-1时， 数据重复问题，概率较低
-- 假如leader收到数据，向follower同步完成后，在应答瞬间，leader挂了, ack失败 
-- 其他follower成为leader，继续接受上次的数据，就会产生重复的消息
+# min.insync.replicas=1      默认为1
+- 就不考虑leader向follower同步数据问题
+- 1指的就是leader                         leader：0，   isr：0
+- 就和ACK=1时候一样了
 ```
 
-### 4.3 重复性
+![image-20240311112624604](https://erick-typora-image.oss-cn-shanghai.aliyuncs.com/img/image-20240311112624604.png)
 
-#### a. 幂等性
+#### 可靠方案
+
+- 必须全部条件满足
+- 数据最少发送一次
+
+```bash
+- ACK=-1 
+- 分区副本 >= 2 
+- ISR中应答的最小副本数量 >= 2        #  默认为1
+```
+
+## 3. 重复性
+
+### 3.1 数据重复
+
+![image-20240311113827271](https://erick-typora-image.oss-cn-shanghai.aliyuncs.com/img/image-20240311113827271.png)
+
+- 假如leader收到数据，向follower同步完成后，在应答瞬间，leader挂了, ack失败 
+- 其他follower成为leader，继续接收上次的数据，就会产生重复的消息
+- 概率较小，但是依然可能发生
+
+### 3.2 幂等性-单分区单会话
 
 - producer不论向broker发送多少次重复数据，broker端都只会持久化一次，保证不重复
+- 开启幂等：enable.idempotence:true     默认为true    false关闭
 
 ```bash
-# 根据 <PID + Partition+SeqNumber>:  如果数据重复，就会在内存中将数据删除，不会进行落盘
+# Producer在发送数据的时候，会生成<PID + Partition + SeqNumber>，作为消息的主键
+# Kafak Server端会缓存这个主键，来进行消息的去重， 如果数据重复，就会在内存中将数据删除，不会进行落盘
+
+# PID: ProducerID
+- 在Producer初始化时分配，作为每个Producer会话的唯一标识
+- 每创建一个新的Producer, 就会分配一个新的PID
+
+# Sequence Number
+- Producer发送的每条消息（更准确地说是每一个消息批次，即ProducerBatch）都会带有此序列号
+- 单调递增，从0开始
+- 属于Producer的属性
+
+# Partition
+- 分区
+
 # 只能保证： 单分区单会话，不可重复性
-- PID: ProducerID, producer每重启一次，都会分配一个新的PID
-- Partition: 分区
-- Sequence Number: 单调递增，从0开始,  属于kafka对应的broker的指定topic的属性
-
-# 开启幂等
-- enable.idempotence:true     默认为true    false关闭
-
-# 分区问题
-- 一般情况下，同一个value的数据，经过分区器处理后，就只会进入某个指定分区
 ```
 
-![image-20220910102409381](https://erick-typora-image.oss-cn-shanghai.aliyuncs.com/img/image-20220910102409381.png)
+![image-20240311174529894](https://erick-typora-image.oss-cn-shanghai.aliyuncs.com/img/image-20240311174529894.png)
 
-#### b. 事务
+### 3.3 事务
 
-- 开启事务，必须开启幂等
+- 开启事务，必须开启幂等性
+- TODO
 
-### 4.4 有序性
 
-####  单分区
 
-```bash
-# 1.   1.x版本之前，保证单分区内有效
-max.in.flight.requests.per.connection=1
+## 4.有序性
 
-# 2.   1.x版本之后，
-#      未开启幂等性
-max.in.flight.requests.per.connection=1
+###  4.1 单分区
 
-#      开启幂等性
-enable.idempotence=true                   # 需要用到其中的自增的sequence number来进行重排
-max.in.flight.requests.per.connection=5   # 需要设置小于等于5， 每个链接中发送的数据数量
-```
+- broker端，最多会缓存producer发过来的最近5个request批次的元数据，可以保证该批数据是有序的
+- 数据落盘后并ack后，会从缓存队列中删除
 
 ```bash
-# broker端，最多 会缓存producer发过来的最近5个request元数据，可以保证该批数据是有序的
 #  1. broker接受到request1和request2，落盘后进行ack
 #  2. request3发送后，假如本次发送时间较长，broker迟迟没有接受到该request
 #  3. 后续的request4和request5发送过来后， 通过序列号发现前面还有待落盘的request3， 则request4和request5暂时保存在内存中
 #  4. request3完成落盘后，request4和request5再完成
+
+#   开启幂等性
+enable.idempotence=true                   # 需要用到其中的自增的sequence number来进行request元数据的排序
+max.in.flight.requests.per.connection=5   # 需要设置小于等于5， 每个链接中发送的数据数量
+
+# 未开启幂等性
+# 该值为1时，才能保证幂等性
+max.in.flight.requests.per.connection=1
 ```
 
 ![image-20220907091648873](https://erick-typora-image.oss-cn-shanghai.aliyuncs.com/img/image-20220907091648873.png)
 
-#### 跨分区
+### 4.2 跨分区
 
 - 多分区，分区与分区间数据无序
 - 如果要实现跨分区有序，可以发送数据时指定key，然后在consumer端进行数据重排，效率低
+- 会比较麻烦，如果需要绝对有序，则建议发送消息时候用单分区
 
-## 5. 参数调优
+```bash
+# 策略1
 
-| Param                                 | DESC                                                        | Default Value | Other                                                        |
-| ------------------------------------- | ----------------------------------------------------------- | ------------- | ------------------------------------------------------------ |
-| buffer.memory                         | RecordAccumulator缓冲区大小                                 | 32M           | 如果分区数过多，可以适当增大                                 |
-| batch.size                            | 缓冲区一批数据最大值                                        | 16k           | 适当增大该值，可以提高吞吐量，但如果设置过大，则会导致数据传输延迟增加 |
-| linger.ms                             | 如果数据迟迟未达到batch.size, 等待linger.ms之后就会发送数据 | 0ms           | 生产环境一般建议为5-100ms之间                                |
-| compression.type                      | 生产者发送的所有数据的压缩方式                              | none          | none, gzip, snappy, lz4, zstd                                |
-| ack                                   | 消息发送成功验证                                            |               | 生产环境一般为all                                            |
-|                                       |                                                             |               |                                                              |
-| enable.idempotence                    | 开启幂等性                                                  | true          | 以下三个参数可以保证单分区消息的有序                         |
-| max.in.flight.requests.per.connection | 允许最多没有返回ack的次数                                   | 5             | 开启幂等,要保证该值是1-5之间                                 |
-| retries                               | 当消息发送到broker server端，出现错误的时候，系统会自动重发 | int的最大值   | 设置了重试，还想保证有序性，max.in.flight.requests.per.connection要为1 |
+# 使用单分区
+- 发送数据时候，指定分区
+- 单分区的数据，kafka的幂等性保证其有序
 
-
-
-
+# 使用单一生产者
+- 如果多个producer一起向某个分区发送数据，则依然可能乱序
+```
 
 # Broker Server
 
@@ -402,19 +433,23 @@ max.in.flight.requests.per.connection=5   # 需要设置小于等于5， 每个�
 
 ```bash
 # 1. 副本数量
-- 默认副本1个，生产环境一般2个(一个leader，一个follower)
+- 默认为1个，生产环境一般2个(一个leader，一个follower)
 - 太多副本： 可以进一步提高数据可靠性。   但是会增加磁盘存储空间，增加网络数据传输，降低效率
 
 - producer和consumer都是从leader获取数据
 
 # 2. 副本信息  AR = ISR + OSR
-- AR(Assigned Replicas):    分区中所有的副本， 包含leader和follower
-- ISR:  和leader保持同步的follwer集合，包括leader+follower
-        如果某follower长时间未向leader发送通信请求或同步数据，该follower就会被踢出ISR
-
-replica.lag.time.max.ms:30000     默认30s
+   # AR(Assigned Replicas) 
+   - 分区中所有的副本， 包含leader和follower
+   
+   # ISR
+   - 和leader保持同步的follwer集合，包括leader+follower
+   - 如果某follower长时间未向leader发送通信请求或同步数据，该follower就会被踢出ISR
+   - replica.lag.time.max.ms:30000     默认30s
+   - 如果leader挂了，则会从follower中重新选去出新的follower
         
- - OSR: follower和副本同步时，延迟过大的副本集合
+   # OSR
+   - follower和副本同步时，延迟过大的副本集合
 ```
 
 - 副本数量为3的架构
@@ -532,8 +567,6 @@ log.cleanup.policy = compact
 ```
 
 ![image-20220910152933842](https://erick-typora-image.oss-cn-shanghai.aliyuncs.com/img/image-20220910152933842.png)
-
-
 
 # Consumer
 
