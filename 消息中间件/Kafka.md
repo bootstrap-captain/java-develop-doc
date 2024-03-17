@@ -55,14 +55,15 @@
 ## 1. 启动zookeeper
 
 ```bash
-# 1. 在服务器上118.31.244.78安装zookeeper    8G内存
+# 1. 在服务器上39.105.210.163 安装zookeeper    2G内存
 docker pull zookeeper:3.8
-docker run --privileged --name zookeeper -p 2181:2181 --restart always -d 1530b1a1b069 
+docker run --privileged --name zookeeper -p 2181:2181 --restart always -d d079516ebe6b
 ```
 
 ## 2. Kafka集群安装
 
 - 相同步骤，部署三台kafka，但保证对应的broker.id不同即可，本文分别为111， 222， 333
+- 内存最少为1G
 
 ### 2.1 安装
 
@@ -75,7 +76,7 @@ docker run --privileged --name zookeeper -p 2181:2181 --restart always -d 1530b1
 ### 2.2 上传
 
 - Kafka的运行需要有java环境，选择安装java17
-- 阿里云服务器     39.105.210.163,  118.31.238.79，120.26.118.233
+- 阿里云服务器     118.31.237.198    120.55.75.185      118.178.93.223
 
 ```bash
 # 第一台服务器
@@ -110,13 +111,14 @@ broker.id=111
 
 # A comma separated list of directories under which to store log files
 # 存储具体的kafka的message的地方，为自建目录
+# 如果当前该目录不存在，启动的时候会自动创建
 log.dirs=/usr/local/kafka/data
 
 # 外部访问时候的ip和端口，对应的ip为本机的ip
 advertised.listeners=PLAINTEXT://120.77.156.53:9092
 
 # zookeeper的配置：zookeeper的ip和端口
-zookeeper.connect=118.31.244.78:2181
+zookeeper.connect=39.105.210.163:2181
 ```
 
 ### 2.4 环境变量
@@ -354,7 +356,7 @@ RecordAccumulator: 默认为32M
 ### 3.2 幂等性-单分区单会话
 
 - producer不论向broker发送多少次重复数据，broker端都只会持久化一次，保证不重复
-- 开启幂等：enable.idempotence:true     默认为true    false关闭
+- 开启幂等：enable.idempotence:true     默认true    false关闭
 
 ```bash
 # Producer在发送数据的时候，会生成<PID + Partition + SeqNumber>，作为消息的主键
@@ -412,11 +414,12 @@ max.in.flight.requests.per.connection=1
 
 - 多分区，分区与分区间数据无序
 - 如果要实现跨分区有序，可以发送数据时指定key，然后在consumer端进行数据重排，效率低
-- 会比较麻烦，如果需要绝对有序，则建议发送消息时候用单分区
+
+### 4.3 绝对有序
+
+- 如果需要绝对有序，则建议发送消息时候用单分区
 
 ```bash
-# 策略1
-
 # 使用单分区
 - 发送数据时候，指定分区
 - 单分区的数据，kafka的幂等性保证其有序
@@ -434,19 +437,21 @@ max.in.flight.requests.per.connection=1
 ```bash
 # 1. 副本数量
 - 默认为1个，生产环境一般2个(一个leader，一个follower)
-- 太多副本： 可以进一步提高数据可靠性。   但是会增加磁盘存储空间，增加网络数据传输，降低效率
+- 太多副本： 进一步提高数据可靠性。 但会增加磁盘存储空间，增加网络数据传输，降低效率
+- 一般副本数量为Kafka集群的server数量-1
 
-- producer和consumer都是从leader获取数据
+#  producer和consumer都是和leader进行通讯
 
 # 2. 副本信息  AR = ISR + OSR
-   # AR(Assigned Replicas) 
+   # AR (Assigned Replicas) 
    - 分区中所有的副本， 包含leader和follower
    
-   # ISR
-   - 和leader保持同步的follwer集合，包括leader+follower
+   # ISR(In-sync Replcaition Set)
+   - 和leader保持同步的follwer集合，包括leader + follower
    - 如果某follower长时间未向leader发送通信请求或同步数据，该follower就会被踢出ISR
    - replica.lag.time.max.ms:30000     默认30s
-   - 如果leader挂了，则会从follower中重新选去出新的follower
+   
+   - 如果leader挂了，则会从follower中重新选出新的follower
         
    # OSR
    - follower和副本同步时，延迟过大的副本集合
@@ -464,37 +469,67 @@ max.in.flight.requests.per.connection=1
 
 ![](https://erick-typora-image.oss-cn-shanghai.aliyuncs.com/img/image-20220910110525667.png)
 
-```bash
-# 1. 存储位置： 配置文件中配置data存储的位置
+#### 存储位置
+
+- 配置文件中配置data存储的位置
 - 每个topic的每个partition对应一个文件目录，包含对应的消息的文件
-- log： 实际存储数据，并不是log目录名，目录名为： topicName--partition no
 
-# log:  包含leader的数据和其他partition的follower的数据，
-# 因此会出现比如 nike-0    nike-1两个目录， 是因为其中一个是leader数据，另外一个是其他partition的follower数据
+```bash
+# 1. /kafka/data/citi-0 ， 包含leader的数据和其他partition的follower的数据
+- 因此会出现比如 citi-0    citi-1两个目录， 是因为其中一个是leader数据，另外一个是其他partition的follower数据
 
-# 2. segment：一个log中的数据，会再次切分为多个segment，每个segment大小为1G
-# 每个segment的对应的数字，其实就是方便索引
+# 2. segment：一个topic+partitionNo 中的数据，会再次切分为多个segment，每个segment大小为1G
+# /usr/local/kafka/kafka_2.12-3.2.1/config/server.properties
+- log.segment.bytes=1073741824
+```
+
+#### 存储内容
+
+```bash
 # 每个segment的文件内容如下， 同时引入分片和索引机制
-
 00000000000000000000.log：            # 具体的消息， 序列化后的数据
 00000000000000000000.index ：         # 文件数据的索引
 00000000000000000000.timeindex：      # 时间戳索引文件，用来删除数据，默认保留7天
 leader-epoch-checkpoint:              # 是不是leader
 partition.metadata:                   # 元数据信息
 
-# 3. 通过不同的index，能够快速定位到消息
-- index采用稀疏索引，大约每往.log文件中写入4k数据，才会往index里面写入一条索引
-log.index.interval.bytes:4kb
-
-# 4. 数据添加方式
-- 产生的新数据，不断追加到该.log文件末尾
+# 新的segment： 会根据绝对offset来作为文件命名规则
+- 00000000000000004096.log
+- 00000000000000004096.index
+- 00000000000000004096.timeindex
 ```
+
+#### 稀疏索引
+
+- 通过不同的index，能够快速定位到消息
+- index采用稀疏索引，大约每往.log文件中写入4k数据，才会往index里面写入一条索引
+
+```bash
+log.index.interval.bytes:4kb
+```
+
+#### 数据查找
+
+![image-20240315210103367](https://erick-typora-image.oss-cn-shanghai.aliyuncs.com/img/image-20240315210103367.png)
+
+```bash
+# 1. 根据offset，定位segment文件
+# 2. 找到小于等于目标offset的最大offset对应的索引项
+# 3. 定位到log文件
+# 4. 向下遍历，找到目标Record
+```
+
+#### 数据添加
+
+- 产生的新数据，不断追加到该.log文件末尾
+- 速度较快
 
 ### 2.2 清除策略
 
 ```bash
 # 默认时间： 默认数据保存7天，到期后通过清除策略处理
 # 配置以下不同方式，优先级从低到高
+# /usr/local/kafka/kafka_2.12-3.2.1/config/server.properties
 log.rentention.hours:
 log.rentention.minutes:
 log.rentention.ms:
@@ -503,46 +538,55 @@ log.rentention.ms:
 log.rentention.check.interval.ms:  
 ```
 
-**delete策略**
+#### DELETE策略
+
+- log.cleanup.policy=delete
+- 默认选择
 
 ```bash
-log.cleanup.policy=delete
+# 基于时间： 
+- 默认打开，通过segment中所有记录中的 最大时间戳 作为该文件时间戳
+- 一个segment中包含过期的和不过期的，则选取最大的，就不会删除
 
-#    1.1 基于时间： 默认打开，通过segment中所有记录中的最大时间戳作为该文件时间戳
 log.rentention.hours:
-#    1.2 基于大小： 默认关闭，表示无穷大，永不过期
+
+
+# 基于大小： 默认关闭，表示无穷大，永不过期
 #                 超过设置的所有日志总大小，删除最早的segment
 #                 放置数据超过服务器最大硬盘，删除最早的segment
 log.rentention.bytes: 
 ```
 
-**compact策略**
+#### COMPACT策略
 
-- 针对相同key的不同value，只保留最后一个版本
-- 适合场景： 消息的key是用户ID，value是用户资料
-- 压缩后的offset可能是不连续的，比如没有6，当从这个offset开始消费时，将会拿到比这个offset大的offset对应的消息，即为7
+- log.cleanup.policy = compact
+- 默认关闭
 
 ```bash
-log.cleanup.policy = compact
+# 针对相同key的不同value，只保留最后一个版本
+- 适合场景： 消息的key是用户ID，value是用户资料
+
+- 压缩后的offset可能是不连续的，比如没有6，当从这个offset开始消费时，将会拿到比这个offset大的offset对应的消息，即为7
 ```
 
 ![image-20220910151147907](https://erick-typora-image.oss-cn-shanghai.aliyuncs.com/img/image-20220910151147907.png)
 
 ## 3. 高效读写
 
-```bash
-# 1. 分布式集群： 
+### 3.1 分布式集群
+
 - 分布式集群，分区技术，producer和conusmer并行度高
 
-# 2. 稀疏索引
+### 3.2 稀疏索引
+
 - 读数据采用稀疏索引，可以快速定位到要消费的数据
 
-# 3. 顺序写磁盘
+### 3.3 顺序写磁盘
+
 - producer产生的数据，在写入到log文件中时，追加到文件末端，为顺序写
 - 官网数据： 同样的磁盘，顺序写能达到600M/s,  随机写只有 100k/s
 
-# 4. 页缓存和零拷贝
-```
+### 3.4 页缓存和零拷贝
 
  **非零拷贝**
 
@@ -588,11 +632,11 @@ log.cleanup.policy = compact
 ## 2. consumer组
 
 ```bash
-# 1 consumer组：
+# consumer组：
 - 一个consumer可以消费多个partition中数据
-- 一个consumer group中的的不同consumer，可以分别消费不同partition中数据
-- 一个consumer group 的多个consumer，不能同时消费同一个partition(引发重复)
-- 一个consumer group 的consumer超过了partition数，则一部分consumer处于空闲状态
+- 消费者组中，不同consumer，可分别消费不同partition中数据
+- 消费者组中，多个consumer，不能同时消费同一个partition(引发重复)
+- 消费者组中，consumer超过了partition数，则一部分consumer处于空闲状态
 
 # tips
 - 引入主要目的是为了快速消费不同partition
@@ -601,34 +645,25 @@ log.cleanup.policy = compact
 group.id="citi-erick"
 ```
 
-
-
-### 2.1 消费者组初始化
-
-![image-20220910112933763](https://erick-typora-image.oss-cn-shanghai.aliyuncs.com/img/image-20220910112933763.png)
+### 2.1 消费组初始化
 
 ```bash
 # coordinator: 辅助实现consumer组的初始化和分区配置
-- 每个broker节点都会有对应的coordinator
-- 会由其中的一个coordinator来进行consumer组的初始化和分区配置
-- coordinator节点选择 = groupId的hashCode % 50 (_consumer_offsets的分区数量，可以调整)
-
-# 心跳机制
-- 每个consumer都会向coordinator保持心跳(默认3s)
-# 再平衡： 会影响kafka性能
-- 1.超时未发送心跳，该consumer就会被移除，并触发再平衡                       session.timuout.ms = 45 s
-- 2.consumer处理消息时间过长, 也会触发再平衡 (会导致重复消费)                 max.poll.interval.ms = 5 min
-
-# consumer节点故障：session.timuout.ms = 45 s
-- 45s内，如果某个consumer挂掉，则该consumer的任务交给某个consumer去消费
-- 45s后，consumer依然没有恢复，该consumer就会被移除该消费者组，并且重新制定消费计划
+- 每个broker节点都有对应的coordinator
+- 目标coordinator节点 = hashCode(groupId) % 50 (_consumer_offsets的分区数量，可以调整)
+- 目标coordinator：进行consumer组的初始化和分区配置
+- 消费者组选出目标coordinator后，与其通信进行消息处理
 ```
 
-### 2.2 消费流程
+![image-20220910112933763](https://erick-typora-image.oss-cn-shanghai.aliyuncs.com/img/image-20220910112933763.png)
+
+### 2.2 消费过程
 
 ![image-20220907140144643](https://erick-typora-image.oss-cn-shanghai.aliyuncs.com/img/image-20220907140144643.png)
 
 ```bash
+# 数据大小和时间，满足一个即可
+
 # 每批次拉取的最小数据
 fetch.min.byte=1k
 
@@ -637,18 +672,48 @@ fetch.max.wait.ms=500ms
 
 # 每批次拉取的最大数据量
 fetch.max.bytes=50m
+
+# parseRecord:   数据的反序列化
+# Interceptors:  拦截器(可以用来做数据的统计)
 ```
 
+### 2.3 再平衡
 
+- 三个参数都是在consumer端进行配置
 
-### 2.3 分区消费策略
+```bash
+# 心跳机制
+- 每个consumer都会向coordinator保持心跳
+- 默认3s
+- heartbeat.interval.ms=3000         
 
-- consumer-leader在指定消费策略时，一个consumer group中多个consumer，一个topic多个partition，到底哪个consumer来消费哪个partition
-- partition.assignment.strategy：可以通过配置文件或者代码端
+# 再平衡
+- 再平衡会影响Kafka的性能
 
-#### Range
+    # 超时心跳
+    - 超时未发送心跳，该consumer就会被移除，并触发再平衡
+    - 默认45s
+    - session.timuout.ms=45000
+          # 45s内，某个consumer挂掉，则该consumer的任务交给某个consumer去消费
+          # 45s后，consumer依然没有恢复，该consumer就会被移除该消费者组，并且重新制定消费计划
+    
+    # consumer处理消息时间长
+    - consumer处理消息时间过长, 也会触发再平衡 (会导致重复消费)  
+    - 默认5min
+    - max.poll.interval.ms = 5 min
+         # 会将该consumer踢出consumer group，并把任务重新交给其他的consumer去处理，并重新制定消费计划
+         # 有心跳，但是被强制踢出
+```
+
+## 3. 分区分配策略
+
+- consumer-leader在指定消费策略时，消费者组中多个consumer，一个topic多个partition，到底哪个consumer来消费哪个partition
+- partition.assignment.strategy：可以在代代码端配置
+
+### 3.1 Range
 
 - 针对单独一个topic而言
+- 默认分区分配策略
 
 ```bash
 # 分区规则: 
@@ -663,7 +728,7 @@ fetch.max.bytes=50m
 
 ![image-20220910113823683](https://erick-typora-image.oss-cn-shanghai.aliyuncs.com/img/image-20220910113823683.png)
 
-#### RoundRobin
+### 3.2 RoundRobin
 
 ```bash
 # 分区规则： 针对集群中所有topic
@@ -673,7 +738,7 @@ fetch.max.bytes=50m
 
 ![image-20220910163624443](https://erick-typora-image.oss-cn-shanghai.aliyuncs.com/img/image-20220910163624443.png)
 
-#### Sticky
+### 3.3 Sticky
 
 ```bash
 # 黏性分区
@@ -681,14 +746,14 @@ fetch.max.bytes=50m
 - 不同于range，会采用随机的方式，将对应的topic的partition分配给不同的consumer
 ```
 
-##  3. offset
+##  4. offset
 
 - consumer消费一个topic的partition时，假如consumer突然挂掉，下次consumer重启时需要知道从哪里开始继续消费
 - offset维护在kafka的系统主题中： _consumer_offsets
 
 ![image-20220907140510556](https://erick-typora-image.oss-cn-shanghai.aliyuncs.com/img/image-20220907140510556.png)
 
-###  3.1 存储位置
+###  4.1 存储位置
 
 ```bash
 # 存放位置
@@ -698,13 +763,12 @@ fetch.max.bytes=50m
 - 每隔一段时间，kafka内部会对该topic进行压缩， 即groupId + topic + partition  保留最新数据
 
 # _consumer_offsets:  该topic默认不能被消费
-- 可修改 config/consumer.properties中添加 exclude.internal.topics = false 来消费该主题， 默认为true
-- 也可代码中consumer端配置参数
-
-exclude.internal.topics = false
+- exclude.internal.topics=false,  默认为true
+- 可修改 config/consumer.properties中添加上面属性
+- 也可consumer端代码中配置参数
 ```
 
-###  3.2 自动offset
+###  4.2 自动offset
 
 - kafka自动存在offset功能
 - 每次提交完毕后，才会继续消费下一批数据
@@ -712,16 +776,20 @@ exclude.internal.topics = false
 ```bash
 enable.auto.commit:true               # 是否开启自动提交offset功能， 默认为true
 auto.commit.interval.ms:5000          # 自动提交offseet的时间间隔，默认是5s
+
+# 1. 每次消费后，consumer不用提交，继续消费后面的数据
+# 2. 5s后，kafka自动将该consumer上一个的offset进行提交
 ```
 
-###  3.3 手动offset
+![image-20240316164053305](https://erick-typora-image.oss-cn-shanghai.aliyuncs.com/img/image-20240316164053305.png)
+
+###  4.3 手动offset
 
 - 自动提交offset十分简单，但是是基于时间提交的，kafka提供更精准的手动提交的功能
-- offset提交值为什么是不连续的？
 
 ```bash
 # 同步提交---commitSync
-- 将本次提交的一批数据的offset提交
+- 将本次消费的一批数据的offset提交
 - 阻塞当前线程，一直到提交成功，才会进行下一批次的消费
 - 并且会自动失败重试(不可控因素导致，提交失败)
 
@@ -734,41 +802,53 @@ auto.commit.interval.ms:5000          # 自动提交offseet的时间间隔，默
 - 消费完后进行commitAsync或commitSync
 ```
 
-### 3.4 指定offset消费
+### 4.4 指定offset消费
 
 ```bash
 # 包含earliest, latest, none
 
-# earliest：   当各分区下有已提交的offset时，从提交的offset开始消费；无提交的offset时，从头开始消费
-# latest：     当各分区下有已提交的offset时，从提交的offset开始消费；无提交的offset时，消费新产生的该分区下的数据
-# none：       如果没找到消费者组的先前偏移量， 则向consumer抛出异常
+# earliest：   
+- 当各分区下有已提交的offset时，从提交的offset开始消费；无提交的offset时，从头开始消费
+
+# latest：     
+- 当各分区下有已提交的offset时，从提交的offset开始消费；无提交的offset时，消费新产生的该分区下的数据
+
+# none：      
+- 如果没找到消费者组的先前偏移量， 则向consumer抛出异常
 
 auto.offset.reset=latest
 # 也可以指定offset或者指定时间进行消费
 ```
 
-##  4. 可靠性
+##  5. 可靠性
 
-### 4.1 漏消费和重复消费
+### 5.1 重复消费
+
+- 自动提交offset引发
 
 ```bash
-# 重复消费
-- 自动提交offset引发
 - 如果提交了一次offset，2s后consumer挂了
 - 再次重启consumer，则从上次提交的offset继续消费，导致重复消费
+```
 
-# 漏消费
+![image-20240316173345390](https://erick-typora-image.oss-cn-shanghai.aliyuncs.com/img/image-20240316173345390.png)
+
+### 5.2 漏消费
+
 - 手动提交offset引发
-- 当offset被提交时，数据还在consumer端正在处理，consumer突然挂了
+
+```bash
+# 异步手动提交
+- 当offset被提交时，数据还在consumer端正在处理(比如落库)，consumer突然挂了
 - 再次重启consumer，则之前的数据丢失
 ```
 
-### 4.2 消费者事务
+### 5.3 消费者事务
 
 - 如果要确保精确收到一次
 - 需要kafka消费端，将消费过程和提交offset过程做原子绑定，比如和mysql对应
 
-### 4.3 数据积压
+### 5.4 数据积压
 
 - topic中数据默认是保存7天
 - 如果consumer能力不足，可能导致数据丢失
@@ -779,32 +859,14 @@ auto.offset.reset=latest
 - 提高每批次拉取数据的内存上限
 ```
 
-## 5. 参数调优
-
-
-
-| Param                   | Desc                                                         | Default Value | Other                                                        |
-| ----------------------- | ------------------------------------------------------------ | ------------- | ------------------------------------------------------------ |
-| heartbeat.interval.ms   | consumer和coordinator心跳时间                                | 3s            | 必须小于session.timeout.ms, 也不应该高于session.timeout.ms的1/3 |
-| session.timeout.ms      | consumer和coordinator心跳超时，consumer 被移除               | 45s           |                                                              |
-| max.pull.interval.ms    | 消费消息处理时间的最大值， 超时则触发再平衡                  | 5min          |                                                              |
-| fetch.min.bytes         | 拉取数据时，每次达到该值就可以拉取                           | 1k            | 数据从 server端，拉取到consumer端队列中                      |
-| fetch.max.wait.ms       | 拉取数据时，如果没达到fetch.min.bytes， 但是等待时间到达，则依然会拉取 | 500ms         |                                                              |
-| fetch.max.bytes         | 一次拉取数据时，最大能拉取的数据                             | 50M           |                                                              |
-| max.poll.records        | consumer具体每次处理的消息条数                               | 500           |                                                              |
-|                         |                                                              |               |                                                              |
-| enable.auto.commit      | offset的自动提交                                             | true          | 生产环境一定要设置为手动提交                                 |
-| auto.commit.interval.ms | offset的自动提交的时间间隔                                   | 5s            |                                                              |
-| auto.offet.reset        | consumer宕机重启后从哪里消费                                 | latest        | earliest: 自动重置偏移量为最早<br />latest: 自动重置偏移量为最新 |
-
 # Kafka-Monitor
 
 - Kafka-Eagle, [官网下载](https://www.kafka-eagle.org/)，对应的二进制文本
+- version: 3.0.1
 
 ## 1. 下载
 
 ```bash
-# 阿里云服务器安装kafka eagle:  39.108.99.248
 - Kafka-eagle依赖需要用到jdk环境， 安装前需要先安装JDK, 并配置好环境变量
 - MYSQL： kafka-eagle的数据信息需要保存在mysql中
 - 阿里云服务器选用2核8G, 内存过小可能跑不起来
@@ -815,11 +877,11 @@ mkdir kafka-eagle
 put /Users/shuzhan/Desktop/kafka-eagle-bin-3.0.1.tar.gz /usr/local/kafka-eagle
 
 tar -zxvf kafka-eagle-bin-3.0.1.tar.gz 
+cd kafka-eagle-bin-3.0.1
 tar -zxvf efak-web-3.0.1-bin.tar.gz 
 
 # 最终解压后的文件为 efak-web-3.0.1
 /usr/local/kafka-eagle/efak-web-3.0.1
-
 ```
 
 ## 2. 修改配置
@@ -828,7 +890,7 @@ tar -zxvf efak-web-3.0.1-bin.tar.gz
 
 ```bash
 # 1 zookeepr对应的集群和端口号， 可以监控多个cluster
-efak.zk.cluster.alias=cluster1           
+efak.zk.cluster.alias=cluster1       
 cluster1.zk.list=120.79.28.20:2181
 
 # 2. offset信息是保存在kafak中的，将第二行注掉
@@ -859,7 +921,7 @@ source /etc/profile
 jps
 
 # 4. 访问： 默认用户名和密码是： admin   123456
-http://39.108.99.248:8048
+http://121.43.59.152:8048
 
 
 # 如果出现异常问题，可以通过下面的错误日志来查看错误
