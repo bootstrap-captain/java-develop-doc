@@ -4,7 +4,7 @@
 
 ------
 
-# 基本介绍
+# 基础架构
 
 ## 1. 消费模式
 
@@ -18,26 +18,36 @@
 
 - 多个Consumer相互独立，都可以获取到数据
 - Consumer消费数据后，不会删除数据，默认有消息过期时间
+- Kafak只支持Topic模式
 
 ![image-20240226152702131](https://erick-typora-image.oss-cn-shanghai.aliyuncs.com/img/image-20240226152702131.png)
 
-## 2. 基础架构
+## 2. Kafka架构
 
-- 高并发：一个topic的消息，根据分区策略，存储在不同server上不同partition
-- 高性能：配合partition设计，consumer通过consumer group，组内每个consumer并行消费不同partition的消息
-- 高可用：为每个partition在其他节点引入副本，提供leader-follower机制，防止单点故障
+### 2.1 Kafka Cluster + Zookeeper
 
-![image-20220906164905245](https://erick-typora-image.oss-cn-shanghai.aliyuncs.com/img/image-20220906164905245.png)
+```bash
+# 高并发
+- 一个topic的消息，根据分区策略，存储在不同server上对应的不同partition
+
+# 高性能
+- 配合partition设计，consumer通过consumer group，组内每个consumer并行消费不同partition的消息
+
+# 高可用
+- 为每个partition在其他节点引入副本，提供leader-follower机制，防止单点故障
+```
+
+![image-20240322113304756](https://erick-typora-image.oss-cn-shanghai.aliyuncs.com/img/image-20240322113304756.png)
 
 ```bash
 # 1. leader-follower机制
-- producer和consumer都是连接leader节点，不会和follower节点通信
+- producer和consumer: 只和leader节点通信
 - leader获取数据后，会同步到follower节点
 - leader挂掉后，follower有条件会成为新的leader
 
-# 2. consumer
+# 2. consumer group
 - 消费组：同一个消费组内，不同的消费端去连接不同的partition，增大消费能力
-- 同一个消费组内，不同的消费端不能连接同一个partition，否则造成消息重复消费
+- 同一个消费组内，不同的消费端不能连接同一个partition，否则就重复消费
 - 同一个消费组内，一个消费端可以去消费不同partition
 
 # 3. zookeeper
@@ -46,17 +56,83 @@
 - kafka-2.8.0前，必须配合zk使用， 2.8.0后，去zk化
 ```
 
+## 3. Java客户端
+
+```xml
+  <dependency>
+      <groupId>org.apache.kafka</groupId>
+      <artifactId>kafka-clients</artifactId>
+      <version>3.7.0</version>
+  </dependency>
+```
+
+
+
 # Producer
 
-## 1. 原理
+- APP客户端，调用Kafka的API，向Kafka Cluster端发送数据
 
 ![image-20220906165828046](https://erick-typora-image.oss-cn-shanghai.aliyuncs.com/img/image-20220906165828046.png)
 
+## 1. Interceptors
+
+- 拦截器：拦截消息，进行一些过滤，可以自定义，一般不使用
+
+## 2. Serializer
+
+- 序列化器：跨节点通讯，不用java自带的序列化， 采用轻量级序列化，避免序列化信息太多引发数据过大
+- 对应的消费消息时候，也有反序列化工具
+- 对key和value来进行序列化
+
+![image-20240322121859157](https://erick-typora-image.oss-cn-shanghai.aliyuncs.com/img/image-20240322121859157.png)
+
+![序列化](https://erick-typora-image.oss-cn-shanghai.aliyuncs.com/img/%E5%BA%8F%E5%88%97%E5%8C%96.png)
+
+## 3.  Partitioner
+
+- 分区器：决定数据应该存放在哪个分区
+
+![image-20240322123515926](https://erick-typora-image.oss-cn-shanghai.aliyuncs.com/img/image-20240322123515926.png)
+
+### 3.1 分区优点
+
+#### 数据均衡
+
+- 一个topic的所有数据通过分区规则，分别存在在不同的server上对应的partition
+- 合理控制分区规则，可以达到数据均衡分布
+
+#### 高并发
+
+-  producer: 可以以分区为单位发送数据
+- consumer: 可以以分区为单位消费数据
+
+### 3.2 分区策略
+
+- 分区数：0，1，2等， 根据broker节点向zookeeper注册时间和数目来判断
+- 假如存在三个broker，那么有效分区就是0，1，2
+
+#### DefaultPartitioner
+
+- 默认分区策略
+
 ```bash
-# 1. producer
-- Interceptors-拦截器：  拦截消息，进行一些过滤，可以自定义，一般不使用
-- Serializer-序列化器：  跨节点通讯，不用java自带的序列化， 采用轻量级序列化，避免序列化信息太多引发数据过大
-- Partitioner-分区器：  决定数据应该存放在哪个分区
+- 指定分区：    如果指定分区，则使用
+- 按照key：    如果不指定分区，但是存在key，则用key的hash对分区数取模 （比如key的hash为5，分区数量为3，则就存在2号分区内）
+- Stick Partition： 若不指定分区，不存在key，则使用
+                      1.随机选择一个分区，并尽可能一直使用该分区
+                      2.等到该分区的batch已满(batch.size)或已经完成(linger.ms)，则再随机选一个分区(和上一次分区不同)
+
+# 2. 自定义分区器： 
+#    2.1. 实现对应的package org.apache.kafka.clients.producer.Partitioner接口
+#    2.2. 重写partition()方法
+#    2.3  写入Producer的config中
+- 比如根据key，不同数据库的数据，用表名做为key，存放在不同分区
+- 过滤脏数据
+```
+
+## 4. 其他
+
+```bash
 
 # 2. RecordAccumulator: 缓存队列 
 # 两个条件只要达到一个就会被拉取
@@ -107,45 +183,6 @@ producer.send(new ProducerRecord(topicName, partition, key, value)).get();
 ```
 
 ![](https://erick-typora-image.oss-cn-shanghai.aliyuncs.com/img/image-20220909110349719.png)
-
-## 3. 分区
-
-### 3.1 优点
-
-```bash
-# 1. 合理使用存储资源
-- 合理存储资源：一个topic的所有数据分partition存储，每个partition在一个broker上存储
-             可以把海量数据按照分区切割成一块一块的数据存储在多台broker上
-             
-- 合理控制分区的任务，可以实现负载均衡
-
-# 2. 提高并行度
-- producer: 可以以分区为单位发送数据
-- consumer: 可以以分区为单位消费数据
-```
-
-![image-20220909150030293](https://erick-typora-image.oss-cn-shanghai.aliyuncs.com/img/image-20220909150030293.png)
-
-### 3.2 分区策略
-
-- 分区数：0，1，2等， 根据broker节点向zookeeper注册时间和数目来判断
-- 假如存在三个broker，那么有效分区就是0，1，2
-
-```bash
-# 1. 默认分区策略: package org.apache.kafka.clients.producer.internals.DefaultPartitioner
-- 指定分区：    如果指定分区，则使用
-- 按照key：    如果不指定分区，但是存在key，则用key的hash对分区数取模 （比如key的hash为5，分区数量为3，则就存在2号分区内）
-- Stick Partition： 若不指定分区，不存在key，则使用
-                      1.随机选择一个分区，并尽可能一直使用该分区
-                      2.等到该分区的batch已满(batch.size)或已经完成(linger.ms)，则再随机选一个分区(和上一次分区不同)
-
-# 2. 自定义分区器： 
-#    2.1. 实现对应的package org.apache.kafka.clients.producer.Partitioner接口
-#    2.2. 重写partition()方法
-#    2.3  写入Producer的config中
-- 比如根据key，不同数据库的数据，用表名做为key，存放在不同分区
-- 过滤脏数据
-```
 
 # Produce-性能
 
