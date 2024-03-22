@@ -46,109 +46,6 @@
 - kafka-2.8.0前，必须配合zk使用， 2.8.0后，去zk化
 ```
 
-
-
-# 安装-3.2.1
-
-- 集群版本：1台zookeeper，3台kafka组成集群
-
-## 1. 启动zookeeper
-
-```bash
-# 1. 在服务器上39.105.210.163 安装zookeeper    2G内存
-docker pull zookeeper:3.8
-docker run --privileged --name zookeeper -p 2181:2181 --restart always -d d079516ebe6b
-```
-
-## 2. Kafka集群安装
-
-- 相同步骤，部署三台kafka，但保证对应的broker.id不同即可，本文分别为111， 222， 333
-- 内存最少为1G
-
-### 2.1 安装
-
-- [官网下载](https://kafka.apache.org/downloads)
-- kafka的broker端是用scala写的
-- 2.12/2.13代表的是scala的版本， 后面的3.2.1代表的是kafka版本
-
-![image-20220909075507491](https://erick-typora-image.oss-cn-shanghai.aliyuncs.com/img/image-20220909075507491.png)
-
-### 2.2 上传
-
-- Kafka的运行需要有java环境，选择安装java17
-- 阿里云服务器     118.31.237.198    120.55.75.185      118.178.93.223
-
-```bash
-# 第一台服务器
-cd usr/local
-mkdir kafka
-
-# 1. 上传文件并解压
-put /Users/shuzhan/Desktop/kafka_2.12-3.2.1.tgz /usr/local/kafka
-tar -zxvf kafka_2.12-3.2.1.tgz
-```
-
-```bash
-# 目录解释
-LICENSE 
-NOTICE  
-bin               # kafka执行时候的启动脚本
-config            # kafka对应的参数
-libs              # kafka内部运行所需要的jar包
-licenses     
-site-docs
-```
-
-### 2.3 修改配置文件
-
-- /usr/local/kafka/kafka_2.12-3.2.1/config: Kafak的的所有的配置文件
-- server.properties： 该台kafka server端对应的参数
-
-```bash
-# The id of the broker. This must be set to a unique integer for each broker.
-# 该kafka在整个集群中的身份唯一表示
-broker.id=111
-
-# A comma separated list of directories under which to store log files
-# 存储具体的kafka的message的地方，为自建目录
-# 如果当前该目录不存在，启动的时候会自动创建
-log.dirs=/usr/local/kafka/data
-
-# 外部访问时候的ip和端口，对应的ip为本机的ip
-advertised.listeners=PLAINTEXT://120.77.156.53:9092
-
-# zookeeper的配置：zookeeper的ip和端口
-zookeeper.connect=39.105.210.163:2181
-```
-
-### 2.4 环境变量
-
-```bash
-vim /etc/profile
-
-export KAFKA_HOME=/usr/local/kafka/kafka_2.12-3.2.1
-export PATH=$PATH:$KAFKA_HOME/bin
-
-# 刷新环境变量
-source /etc/profile
-```
-
-### 2.5 kafka启动
-
-```bash
-# 1. 启动
-# 进入对应目录
-/usr/local/kafka/kafka_2.12-3.2.1
-
-# kafka-server-start.sh： 启动的脚本
-# -daemon： 后台启动
-# config/server.properties: 按照指定的配置文件启动
-bin/kafka-server-start.sh -daemon config/server.properties
-
-# 查看启动进程, kafka也是java进程
-jps
-```
-
 # Producer
 
 ## 1. 原理
@@ -426,6 +323,63 @@ max.in.flight.requests.per.connection=1
 
 # 使用单一生产者
 - 如果多个producer一起向某个分区发送数据，则依然可能乱序
+```
+
+## 5. 调优
+
+```bash
+# bootstrap.servers
+- value： 118.31.237.198:9092,120.55.75.185:9092,118.178.93.223:9092
+- 服务器集群
+
+# key.serializer
+- key的序列化
+- org.apache.kafka.common.serialization.StringSerializer
+- 支持其他的序列化方式
+
+# value.serializer
+- value的序列化
+- org.apache.kafka.common.serialization.StringSerializer
+- 支持其他的序列化方式
+
+# buffer.memory
+- 缓冲区大小
+- 默认值： 33554432(32M)
+
+# linger.ms
+- 多少s后发送
+- 默认值： 0， 无延迟发送
+- 建议：5-100ms
+
+# batch.size
+- 批次发送多少大小数据发送
+- 默认：16384(16k)
+
+# ack
+- 应答机制
+- 0，1，-1
+
+# max.in.flight.requests.per.connection
+- 确保有序
+- 必须和幂等配合
+- 默认值：5
+- 值范围：0-5
+
+# retries
+- 消息发送出现错误时，重试次数
+- 默认值：int的最大值
+
+# retry.backoff.ms
+- 两次重试之间的时间间隔
+- 默认： 100ms ，一般不要修改
+
+# enable.idempotence
+- 开启幂等性
+- 默认值： true
+
+# compression.type
+- 数据压缩方式
+- 默认值： none
 ```
 
 # Broker Server
@@ -859,73 +813,63 @@ auto.offset.reset=latest
 - 提高每批次拉取数据的内存上限
 ```
 
-# Kafka-Monitor
-
-- Kafka-Eagle, [官网下载](https://www.kafka-eagle.org/)，对应的二进制文本
-- version: 3.0.1
-
-## 1. 下载
+## 6. 调优
 
 ```bash
-- Kafka-eagle依赖需要用到jdk环境， 安装前需要先安装JDK, 并配置好环境变量
-- MYSQL： kafka-eagle的数据信息需要保存在mysql中
-- 阿里云服务器选用2核8G, 内存过小可能跑不起来
+# bootstrap.servers
+- value： 118.31.237.198:9092,120.55.75.185:9092,118.178.93.223:9092
+- 服务器集群
 
-# 安装
-cd usr/local/
-mkdir kafka-eagle
-put /Users/shuzhan/Desktop/kafka-eagle-bin-3.0.1.tar.gz /usr/local/kafka-eagle
+# key.deserializer
+- key的反序列化
+- org.apache.kafka.common.serialization.StringDeserializer
 
-tar -zxvf kafka-eagle-bin-3.0.1.tar.gz 
-cd kafka-eagle-bin-3.0.1
-tar -zxvf efak-web-3.0.1-bin.tar.gz 
+# value.deserializer
+- value的反序列化
+- org.apache.kafka.common.serialization.StringDeserializer
 
-# 最终解压后的文件为 efak-web-3.0.1
-/usr/local/kafka-eagle/efak-web-3.0.1
+# group.id
+- 消费者组的名称
+- 任何消费者必须要有消费者组
+
+# enable.auto.commit
+- 自动offset的提交，消费者会自动周期性向服务器提交偏移量
+- 默认值： true
+
+# auto.commit.interval.ms
+- enable.auto.commit如果为true，该值定义消费者偏移量向kafka的提交频率
+- 默认值： 5000(5s)
+
+# auto.offset.reset
+- 包含earliest, latest, none
+- 默认值： latest
+
+# heartbeat.interval.ms
+- 消费者和coordinator之间的心跳时间
+- 必须小于session.timeout.ms, 不该高于session.timeout.ms的1/3
+- 不建议修改
+- 默认值： 3000(3s)
+
+# session.timeout.ms
+- 消费者和coordinator连接超时时间
+- 超时则该消费者组被移除，并触发消费者再平衡
+- 默认值: 45000(45s)
+
+# max.poll.interval.ms
+- 消费者处理消息的最大时长
+- 超时则该消费者被移除，并触发消费者再平衡
+- 默认值：300000(5min)
+
+# fetch.max.bytes
+- 消费者获取服务器端一批消息最大的字节数
+- 默认值：52428800(50M)
+
+# fetch.min.bytes
+- 消费者获取服务器端一批消息最小的字节数
+- 默认值：1(1k)
+
+# fetch.max.wait.ms
+- 消费者最多等待时间，就会去拉取数据
+- 默认值： 500ms
 ```
 
-## 2. 修改配置
-
-- 修改conf/system.config.properties文件参数
-
-```bash
-# 1 zookeepr对应的集群和端口号， 可以监控多个cluster
-efak.zk.cluster.alias=cluster1       
-cluster1.zk.list=120.79.28.20:2181
-
-# 2. offset信息是保存在kafak中的，将第二行注掉
-cluster1.efak.offset.storage=kafka
-# cluster2.efak.offset.storage=zk
-
-# 3. 监控界面的数据，要保存在数据库中，因此必须提供mysql信息
-# 数据库名称：必须是ke
-efak.driver=com.mysql.cj.jdbc.Driver
-efak.url=jdbc:mysql://39.108.99.248:3307/ke?useUnicode=true&characterEncoding=UTF-8&zeroDateTimeBehavior=convertToNull
-efak.username=root
-efak.password=123456
-```
-
-```bash
-# 1. 配置环境变量
-vim etc/profile
-export KE_HOME=/usr/local/kafka-eagle/efak-web-3.0.1
-export PATH=$PATH:$KE_HOME/bin
-
-# 2. 刷新环境变量
-source /etc/profile
-
-# 3. 启动
-./ke.sh start
-
-# 查看是否启动
-jps
-
-# 4. 访问： 默认用户名和密码是： admin   123456
-http://121.43.59.152:8048
-
-
-# 如果出现异常问题，可以通过下面的错误日志来查看错误
-/usr/local/kafka-eagle/efak-web-3.0.1/logs
-```
-
- 

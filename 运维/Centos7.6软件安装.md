@@ -51,6 +51,108 @@ Java HotSpot(TM) 64-Bit Server VM (build 17.0.4.1+1-LTS-2, mixed mode, sharing)
 - 需要重新打开terminal，不然可能出现查看java -version可能没改过来
 ```
 
+# 安装Kafka
+
+- 集群版本：1台zookeeper，3台kafka组成集群
+- Kafka版本： 3.2.1
+
+## 1. 启动zookeeper
+
+```bash
+# 1. 在服务器上39.105.210.163 安装zookeeper    2G内存
+docker pull zookeeper:3.8
+docker run --privileged --name zookeeper -p 2181:2181 --restart always -d d079516ebe6b
+```
+
+## 2. Kafka集群安装
+
+- 相同步骤，部署三台kafka，但保证对应的broker.id不同即可，本文分别为111， 222， 333
+- 内存最少为1G
+
+### 2.1 安装
+
+- [官网下载](https://kafka.apache.org/downloads)
+- kafka的broker端是用scala写的
+- 2.12/2.13代表的是scala的版本， 后面的3.2.1代表的是kafka版本
+
+![image-20220909075507491](https://erick-typora-image.oss-cn-shanghai.aliyuncs.com/img/image-20220909075507491.png)
+
+### 2.2 上传
+
+- Kafka的运行需要有java环境，选择安装java17
+- 阿里云服务器     118.31.237.198    120.55.75.185      118.178.93.223
+
+```bash
+# 第一台服务器
+cd usr/local
+mkdir kafka
+
+# 1. 上传文件并解压
+put /Users/shuzhan/Desktop/kafka_2.12-3.2.1.tgz /usr/local/kafka
+tar -zxvf kafka_2.12-3.2.1.tgz
+```
+
+```bash
+# 目录解释
+LICENSE 
+NOTICE  
+bin               # kafka执行时候的启动脚本
+config            # kafka对应的参数
+libs              # kafka内部运行所需要的jar包
+licenses     
+site-docs
+```
+
+### 2.3 修改配置文件
+
+- /usr/local/kafka/kafka_2.12-3.2.1/config: Kafak的的所有的配置文件
+- server.properties： 该台kafka server端对应的参数
+
+```bash
+# The id of the broker. This must be set to a unique integer for each broker.
+# 该kafka在整个集群中的身份唯一表示
+broker.id=111
+
+# A comma separated list of directories under which to store log files
+# 存储具体的kafka的message的地方，为自建目录
+# 如果当前该目录不存在，启动的时候会自动创建
+log.dirs=/usr/local/kafka/data
+
+# 外部访问时候的ip和端口，对应的ip为本机的ip
+advertised.listeners=PLAINTEXT://120.77.156.53:9092
+
+# zookeeper的配置：zookeeper的ip和端口
+zookeeper.connect=39.105.210.163:2181
+```
+
+### 2.4 环境变量
+
+```bash
+vim /etc/profile
+
+export KAFKA_HOME=/usr/local/kafka/kafka_2.12-3.2.1
+export PATH=$PATH:$KAFKA_HOME/bin
+
+# 刷新环境变量
+source /etc/profile
+```
+
+### 2.5 kafka启动
+
+```bash
+# 1. 启动
+# 进入对应目录
+/usr/local/kafka/kafka_2.12-3.2.1
+
+# kafka-server-start.sh： 启动的脚本
+# -daemon： 后台启动
+# config/server.properties: 按照指定的配置文件启动
+bin/kafka-server-start.sh -daemon config/server.properties
+
+# 查看启动进程, kafka也是java进程
+jps
+```
+
 # MYSQL
 
 ## 1. 单机版
