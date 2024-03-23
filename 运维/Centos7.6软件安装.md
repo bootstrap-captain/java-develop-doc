@@ -1,3 +1,5 @@
+- 阿里Centos 7.6安装
+
 # 安装JDK17/8
 
 ## 1. 下载
@@ -50,6 +52,70 @@ Java HotSpot(TM) 64-Bit Server VM (build 17.0.4.1+1-LTS-2, mixed mode, sharing)
 # 如果切换了java 版本
 - 需要重新打开terminal，不然可能出现查看java -version可能没改过来
 ```
+
+# 安装Redis
+
+## 单机版-7.2.4
+
+- [官网下载](https://redis.io/download)一个redis
+- 版本地址：https://download.redis.io/releases/
+
+```bash
+# 1. mac控制台上传文件到centos服务器中的opt目录下, 利用mac自带的sftp并解压
+put /Users/shuzhan/Desktop/redis-7.2.4.tar.gz /opt
+tar -zxvf redis-7.2.4.tar.gz
+
+# 2. . 安装
+cd /opt/redis-7.2.4
+make && make install
+# 提示。Hint: It's a good idea to run 'make test' ;  表示安装成功
+
+# 3. 最终安装位置 ： /usr/local/bin/
+cd /usr/local/bin/
+ll
+
+-rwxr-xr-x 1 root root 5092624 Mar 29 22:42 redis-benchmark                   # 性能测试工具
+lrwxrwxrwx 1 root root      12 Mar 29 22:42 redis-check-aof -> redis-server   # 修复有问题的aof
+lrwxrwxrwx 1 root root      12 Mar 29 22:42 redis-check-rdb -> redis-server   # 修复有问题的dump.rdb文件
+-rwxr-xr-x 1 root root 5188792 Mar 29 22:42 redis-cli                         # 客户端，操作入口
+lrwxrwxrwx 1 root root      12 Mar 29 22:42 redis-sentinel -> redis-server    # redis集群使用
+-rwxr-xr-x 1 root root 8916584 Mar 29 22:42 redis-server                      # redis服务器启动命令
+
+# 4. 修改配置文件, 必须重启redis服务才能生效
+#    自定义配置文件
+cd /opt/redis-7.2.4
+mkdir erick_redis
+cp redis.conf erick_redis/erick_redis.conf
+vim erick_redis.conf
+
+bind 127.0.0.1 -::1     # 默认redis只能本地cli访问。注释掉该行，或者改成本机IP,否则会影响远程ip链接
+protected-mode no       # 默认yes，开启保护模式，限制为本地访问
+daemonize yes           # 守护进程，默认no，改为yes
+databases 10            # 默认为16，数据库个数，可以改成10验证配置文件是否生效
+requirepass 123456      # 添加密码
+
+# 5. 启动服务, 在任意目录下，通过配置文件启动服务。 redis-server是一个系统级别的指令
+#    启动的是redis-server
+cd /opt/redis-7.2.4/erick_redis
+redis-server erick_redis.conf
+ps -ef|grep redis|grep -v grep     # 验证是否成功
+root     30490     1  0 23:08 ?        00:00:00 redis-server *:6379
+
+# 6. 查看redis版本
+redis-server -v
+Redis server v=7.2.4 sha=00000000:0 malloc=jemalloc-5.3.0 bits=64 build=a203381984fddfe4
+
+# 7. 直接打开一个redis client
+ redis-cli
+ ping  # 验证是否链接成功
+ auth 123456
+
+# 7. 用IDEA配置的用户名和密码进行登录
+username: default
+password: 123456
+```
+
+
 
 # 安装Kafka
 
