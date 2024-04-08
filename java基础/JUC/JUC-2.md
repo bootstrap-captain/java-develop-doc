@@ -1000,5 +1000,73 @@ public class Demo09 {
 }
 ```
 
-# 集合
+## 5.4  打断park线程
 
+- LockSupport:   public static void park() 
+- park当前的线程: 线程一直生存，直到被打断才会继续往下执行
+- 被打断后，打断标记就会变为true，就不能二次park了
+
+#### 单次park
+
+```java
+package com.nike.erick.d02;
+
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.locks.LockSupport;
+
+public class Demo07 {
+    public static void main(String[] args) throws InterruptedException {
+        Thread thread = new Thread(new Runnable() {
+            @Override
+            public void run() {
+                System.out.println("thread start running....");
+
+                // 将当前线程停下来
+                LockSupport.park();
+                System.out.println("after first park...");
+            }
+        });
+
+        thread.start();
+        TimeUnit.SECONDS.sleep(2);
+        // 打断后就会继续执行
+        thread.interrupt();
+    }
+}
+```
+
+#### 多次park
+
+```java
+package com.nike.erick.d02;
+
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.locks.LockSupport;
+
+public class Demo08 {
+    public static void main(String[] args) throws InterruptedException {
+        Thread thread = new Thread(new Runnable() {
+            @Override
+            public void run() {
+                System.out.println("slave thread running");
+                LockSupport.park();
+                System.out.println("after first park...");
+
+                // 获取当前线程的打断标记，同时将打断标记清除，即为 false
+                System.out.println("打断标记：" + Thread.interrupted());
+
+                LockSupport.park(); // 再次park
+                System.out.println("after second park...");
+            }
+        });
+
+        thread.start();
+        TimeUnit.SECONDS.sleep(1);
+        thread.interrupt();
+        TimeUnit.SECONDS.sleep(3);
+        thread.interrupt();
+    }
+}
+```
+
+## 
