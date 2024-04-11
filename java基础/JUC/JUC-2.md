@@ -1,21 +1,48 @@
 # AQS
 
-## 1. 简介
+- AbstractQueuedSynchronizer：抽象类，阻塞式锁和相关的同步器工具的框架
 
-- AbstractQueuedSynchronizer，是阻塞式锁和相关的同步器工具的框架
+## 1. AbstractQueuedSynchronizer
+
+### 1.1 state
+
+- 表示资源的状态(独占模式， 共享模式)
+- 子类需要定义如何维护这个状态，控制如何获取锁和释放锁
+- 独占模式：只有一个线程能够访问资源
+- 共享模式：允许多个线程访问资源，但对线程的最大数有限制
+
+```java
+private volatile int state;
+
+protected final int getState() {
+     return state;
+}
+
+protected final void setState(int newState) {
+     state = newState;
+}
+
+// 乐观锁机制设置state状态，防止多个线程来修改state
+protected final boolean compareAndSetState(int expect, int update) {
+    return U.compareAndSetInt(this, STATE, expect, update);
+}
+```
+
+### 1.2 阻塞队列
+
+- 提供了基于FIFO的等待队列，类似于Monitor中的EntryList
+
+### 1.3 等待队列
+
+- 条件变量来实现等待，唤醒机制， 支持多个条件变量，类似于Monitor的WaitSet
+
+## 2. 自定义AQS锁
+
+- 用AQS写一个不可重入锁
 
 ```bash
-# state属性： 表示资源的状态(独占模式， 共享模式)， 子类需要定义如何维护这个状态，控制如何获取锁和释放锁
-- 独占模式：只有一个线程能够访问资源。      共享模式：允许多个线程访问资源，但对线程的最大数有限制
-- getState: 获取state属性
-- setState: 设置state属性
-- compareAndSetState: 乐观锁机制设置state状态
-
-# 提供了机遇FIFO的等待队列，类似于Monitor中的EntryList
-
-# 条件变量来实现等待，唤醒机制， 支持多个条件变量，类似于Monitor的WaitSet
-
-# 子类主要实现下面的方法： 默认抛出UnsupportedOperationException
+# 子类继承Lock接口
+# 并实现下面的方法： 默认抛出UnsupportedOperationException
 - tryAcquire
 - tryRealease
 - tryAcquiredShared
@@ -23,113 +50,107 @@
 - isHeldExclusively
 ```
 
-## 2. 自定义AQS锁
+### 2.1 同步器类
 
-- 用AQS写一个不可重入锁
+- 继承AbstractQueuedSynchronizer，重写某些方法
 
 ```java
-package com.erick.multithread.d7;
+package com.erick.multithread.aqs;
+
+import java.util.concurrent.locks.AbstractQueuedSynchronizer;
+import java.util.concurrent.locks.Condition;
+
+public class ErickSync extends AbstractQueuedSynchronizer {
+
+    /*尝试加锁： 修改AbstractQueuedSynchronizer的state属性
+     * 1. 修改state属性
+     * 2. 设置当前线程为Owner中的，类似Monitor的Owner*/
+    @Override
+    protected boolean tryAcquire(int arg) {
+        /*修改AbstractQueuedSynchronizer的state属性
+         * 0: 未加锁
+         * 1: 加锁*/
+        if (compareAndSetState(0, 1)) {
+            // 设置当前线程为Owner的主人
+            // AbstractOwnableSynchronizer方法中的
+            setExclusiveOwnerThread(Thread.currentThread());
+            return true;
+        }
+        return false;
+    }
+
+    /*尝试解锁*/
+    @Override
+    protected boolean tryRelease(int arg) {
+        setState(0); // 不用担心其他线程竞争
+        setExclusiveOwnerThread(null); // 清空owner中的线程
+        return true;
+    }
+
+    /*是否持有当前独占锁*/
+    @Override
+    protected boolean isHeldExclusively() {
+        return getExclusiveOwnerThread() == Thread.currentThread();
+    }
+
+    /*AbstractQueuedSynchronizer类中维护的属性*/
+    public Condition newCondition() {
+        return new ConditionObject();
+    }
+}
+```
+
+### 2.2 自定义锁
+
+```java
+package com.erick.multithread.aqs;
+
+import lombok.extern.slf4j.Slf4j;
 
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.locks.AbstractQueuedSynchronizer;
 import java.util.concurrent.locks.Condition;
 import java.util.concurrent.locks.Lock;
 
-public class Demo03 {
-    public static void main(String[] args) {
-        ErickLock erickLock = new ErickLock();
+/*实现Lock接口*/
+@Slf4j
+public class ErickLock implements Lock {
 
-        new Thread(() -> {
-            erickLock.lock();
-            try {
-                System.out.println("first-thread locking....");
-                TimeUnit.SECONDS.sleep(2);
-            } catch (InterruptedException e) {
-                throw new RuntimeException(e);
-            } finally {
-                System.out.println("first-thread unlocking...");
-                erickLock.unlock();
-            }
-        }).start();
+    private static final long serialVersionUID = 7373984872572414699L;
 
-        new Thread(() -> {
-            erickLock.lock();
-            try {
-                System.out.println("second-thread locking....");
-            } finally {
-                System.out.println("second-thread unlocking...");
-                erickLock.unlock();
-            }
-        }).start();
-    }
-}
-
-class ErickLock implements Lock {
-
-    /*同步器类， 独占锁*/
-    class ErickSync extends AbstractQueuedSynchronizer {
-
-        /*尝试获取锁*/
-        @Override
-        protected boolean tryAcquire(int arg) {
-            /*将state属性从0未加锁 改为 1加锁*/
-            if (compareAndSetState(0, 1)) {
-                // 加上了锁，并设置owner未当前线程
-                setExclusiveOwnerThread(Thread.currentThread());
-                return true;
-            }
-            return false;
-        }
-
-        @Override
-        protected boolean tryRelease(int arg) {
-            /*设置Owner为null，并设置锁的状态为0*/
-            setExclusiveOwnerThread(null);
-            setState(0);
-            return true;
-        }
-
-        /*是否是独占锁*/
-        @Override
-        protected boolean isHeldExclusively() {
-            return getState() == 1;
-        }
-
-        /*等待队列*/
-        public Condition newCondition() {
-            return new ConditionObject();
-        }
-    }
-
+    /*其实就是调用同步器来进行加锁解锁*/
     private ErickSync erickSync = new ErickSync();
 
-    // 加锁，不成功会放入等待队列
+    /*加锁：不成功则会进入类似EntryList的阻塞队列*/
     @Override
     public void lock() {
-        erickSync.acquire(1);
+        erickSync.acquire(1); // 参数暂时没用
     }
 
-    /*加锁，可打断*/
+    /*可打断的加锁*/
     @Override
     public void lockInterruptibly() throws InterruptedException {
         erickSync.acquireInterruptibly(1);
     }
 
+    /*尝试加锁： 只尝试一次*/
     @Override
     public boolean tryLock() {
         return erickSync.tryAcquire(1);
     }
 
+    /*尝试加锁带超时：只尝试一次*/
     @Override
     public boolean tryLock(long time, TimeUnit unit) throws InterruptedException {
         return erickSync.tryAcquireNanos(1, unit.toNanos(time));
     }
 
+    /*释放锁：并唤醒阻塞的线程*/
     @Override
     public void unlock() {
         erickSync.release(1);
     }
 
+    /*创建条件变量*/
     @Override
     public Condition newCondition() {
         return erickSync.newCondition();
@@ -137,224 +158,226 @@ class ErickLock implements Lock {
 }
 ```
 
+### 2.3 测试代码
+
+```java
+package com.erick.multithread.aqs;
+
+import com.erick.multithread.Sleep;
+import lombok.extern.slf4j.Slf4j;
+
+public class Demo01 {
+    public static void main(String[] args) {
+        LockTestService testService = new LockTestService();
+
+        new Thread(() -> testService.work()).start();
+        new Thread(() -> testService.work()).start();
+    }
+}
+
+@Slf4j
+class LockTestService {
+    private ErickLock lock = new ErickLock();
+
+    public void work() {
+        try {
+            lock.lock();
+            log.info("{} will sleep", Thread.currentThread().getName());
+            Sleep.sleep(2);
+        } finally {
+            log.info("{} unlock", Thread.currentThread().getName());
+            lock.unlock();
+        }
+    }
+}
+```
+
 # ReentryLock
+
+- 是AQS的一种实现
 
 ## 1. 可重入锁
 
 - 可重入锁：一个线程已经获取锁，因为该线程是该锁主人，跨方法获取该锁时，依然成功
 - 不可重入：同一线程跨方法获取就会造成死锁，部分锁就是这种情况
 
+### 1.1 重入
+
 ```java
-package com.erick.multithread.d04;
+package com.erick.multithread.aqs;
 
 import lombok.extern.slf4j.Slf4j;
-import org.junit.jupiter.api.Test;
-
-import java.util.concurrent.locks.ReentrantLock;
-
-@Slf4j
-public class Demo01 {
-
-    private ReentrantLock lock = new ReentrantLock();
-
-    @Test
-    void testMethod() {
-        firstMethod();
-    }
-
-    public void firstMethod() {
-        try {
-            lock.lock();
-            log.info("first method get lock");
-            secondMethod();
-        } finally {
-            /*unlock必须放在finally中，保证锁一定可以释放*/
-            lock.unlock();
-        }
-    }
-
-    public void secondMethod() {
-        try {
-            lock.lock();
-            log.info("second method get lock");
-        } finally {
-            lock.unlock();
-        }
-    }
-}
-```
-
-## 2. 可打断锁
-
-- 被动的方式： 避免一个线程一直等待当前要获取的锁
-
-```bash
-- 没有其他线程争夺锁，则正常执行
-- 有竞争时，线程就会进入EntryList，但是可以被打断
-- 其他线程先获取锁，执行一段时间后，等待获取锁的线程 《打断等待》
-```
-
-#### 无竞争
-
-```java
-package com.erick.multithread.d2;
 
 import java.util.concurrent.locks.ReentrantLock;
 
 public class Demo02 {
-    private static ReentrantLock lock = new ReentrantLock();
-
     public static void main(String[] args) {
+        RetryTestService testService = new RetryTestService();
 
-        new Thread(() -> {
-            /*第一个try表示可以被打断*/
-            try{
-                lock.lockInterruptibly();
-            } catch (InterruptedException e) {
-                System.out.println("锁被打断了");
-                throw new RuntimeException(e);
-            }
-            /*第二个try表示释放锁*/
-            try{
-                doBusiness();
-            }finally {
-                lock.unlock();
-            }
-        }).start();
-    }
-
-    private static void doBusiness(){
-        System.out.println("do business logic");
+        /**
+         * 111-加锁
+         * 222-加锁
+         * 222-解锁
+         * 111-解锁
+         */
+        new Thread(() -> testService.first()).start();
     }
 }
-```
 
-#### 有竞争
+@Slf4j
+class RetryTestService {
+    private ReentrantLock lock = new ReentrantLock();
 
-```java
-package com.erick.multithread.d2;
-
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.locks.ReentrantLock;
-
-public class Demo03 {
-    private static ReentrantLock lock = new ReentrantLock();
-
-    public static void main(String[] args) {
-
-        Thread firstThread = new Thread(() -> {
-            /*获取锁的时候，可以被打断，就结束当前等待过程*/
-            try {
-                System.out.println("first-thread 开始等待锁");
-                lock.lockInterruptibly();
-            } catch (InterruptedException e) {
-                System.out.println("first-thread 锁被打断");
-                throw new RuntimeException(e);
-            }
-
-            try {
-                doBusiness();
-            } finally {
-                lock.unlock();
-            }
-        });
-
-        Thread secondThread = new Thread(new Runnable() {
-            @Override
-            public void run() {
-                try {
-                    lock.lock();
-                    /*不会释放锁*/
-                    sleep(2);
-                    firstThread.interrupt();
-                    System.out.println("second-thread完成业务");
-                } finally {
-                    lock.unlock();
-                }
-            }
-        });
-
-        secondThread.start();
-        sleep(1);
-        firstThread.start();
-    }
-
-    private static void doBusiness() {
-        System.out.println("do business logic");
-    }
-
-    private static void sleep(int seconds) {
+    public void first() {
         try {
-            TimeUnit.SECONDS.sleep(seconds);
-        } catch (InterruptedException e) {
-            throw new RuntimeException(e);
+            lock.lock();
+            log.info("111-加锁");
+
+            second();
+
+        } finally {
+            /*unlock必须放在finally中，保证锁一定可以释放*/
+            lock.unlock();
+            log.info("111-解锁");
+        }
+    }
+
+    public void second() {
+        try {
+            lock.lock();
+            log.info("222-加锁");
+        } finally {
+            lock.unlock();
+            log.info("222-解锁");
         }
     }
 }
 ```
 
-## 3 公平锁
+### 1.2 原理
+
+## 2. 可打断锁
+
+```bash
+# 不可打断锁
+- 如：尝试获取synchronized锁的线程，如果获取不到锁，则会在对应Monitor的EntryList中一直死等
+
+# 可打断锁
+- 避免一个线程一直等待当前要获取的锁
+- 被动的方式避免死锁
+
+#  lock.lockInterruptibly();
+- 线程没有获取到锁，进入类似EntryList中等待
+- 这种等待可以被打断
+```
+
+### 2.1 打断
+
+```java
+package com.erick.multithread.aqs;
+
+import com.erick.multithread.Sleep;
+import lombok.extern.slf4j.Slf4j;
+
+import java.util.concurrent.locks.ReentrantLock;
+
+public class Demo03 {
+    public static void main(String[] args) {
+        InterruptLockService service = new InterruptLockService();
+        Thread firstThread = new Thread(() -> service.work());
+        firstThread.start();
+
+        Sleep.sleep(1);
+
+        /*线程2在1s后打断自己获取锁的阻塞状态*/
+        Thread secondThread = new Thread(() -> service.work());
+        secondThread.start();
+        secondThread.interrupt();
+    }
+}
+
+@Slf4j
+class InterruptLockService {
+    private ReentrantLock lock = new ReentrantLock();
+
+    public void work() {
+        try {
+            try {
+                lock.lockInterruptibly();
+                log.info("{} 加锁", Thread.currentThread().getName());
+
+                log.info("doing business");
+                Sleep.sleep(5);
+
+            } catch (InterruptedException e) {
+                log.error("{} 锁打断", Thread.currentThread().getName());
+                throw new RuntimeException(e);
+            }
+        } finally {
+            lock.unlock();
+            log.info("{} 释放锁", Thread.currentThread().getName());
+        }
+    }
+}
+```
+
+### 2.2 原理
+
+
+
+## 3. 公平锁
 
 ```bash
 # 1. 不公平锁
+- synchronized锁
 - 一个线程持有锁时，其他线程进入锁的 EntryList
-- 线程释放锁时，其他线程一拥而上，而不是按照进入的顺序先到先得
+- 获的锁的线程任务执行完后，Owner清空，EntryList中的线程随机挑选一个给锁，而不是按照进入的顺序先到先得
 
 # 2. 公平锁： 通过ReentranLock实现
 - public ReentrantLock(boolean fair) 
 - 默认是非公平锁，传参为true，公平锁
 ```
 
-```java
-package com.erick.multithread.d04;
+### 3.1 公平
 
-import java.util.concurrent.TimeUnit;
+```java
+package com.erick.multithread.aqs;
+
+import com.erick.multithread.Sleep;
+import lombok.extern.slf4j.Slf4j;
+
 import java.util.concurrent.locks.ReentrantLock;
 
-public class Demo02 {
-    private static ReentrantLock lock = new ReentrantLock(true);
-
+public class Demo04 {
     public static void main(String[] args) {
-        new Thread("main-thread") {
-            @Override
-            public void run() {
-                try {
-                    lock.lock();
-                    System.out.println(Thread.currentThread().getName() + " get lock");
-                    rest(5);
-                } finally {
-                    lock.unlock();
-                }
-            }
-        }.start();
-
-        rest(2);
-
-        for (int i = 0; i < 5; i++) {
-            new Thread("t" + i) {
-                @Override
-                public void run() {
-                    try {
-                        lock.lock();
-                        System.out.println(Thread.currentThread().getName() + " get lock");
-                    } finally {
-                        lock.unlock();
-                    }
-                }
-            }.start();
+        FairLockService fairLockService = new FairLockService();
+        for (int i = 0; i < 10; i++) {
+            String name = i + "号线程---";
+            new Thread(() -> fairLockService.work(), name).start();
         }
     }
+}
 
+@Slf4j
+class FairLockService {
+    private ReentrantLock lock = new ReentrantLock(true);
 
-    private static void rest(int seconds) {
+    public void work() {
         try {
-            TimeUnit.SECONDS.sleep(seconds);
-        } catch (InterruptedException e) {
-            throw new RuntimeException(e);
+            lock.lock();
+            log.info("{} 加锁", Thread.currentThread().getName());
+            Sleep.sleep(2);
+        } finally {
+            log.info("{} 释放锁", Thread.currentThread().getName());
+            lock.unlock();
         }
     }
 }
 ```
+
+### 3.2 原理
+
+
 
 ## 4. 超时锁
 
@@ -510,7 +533,7 @@ public class Demo06 {
 
 ## 5. 条件变量
 
-- 多WaitSet， 可以和wait/notify更好的结合
+- 类似WaitSet， 但是有可以有多个，可以和wait/notify更好的结合
 - 将等待的不同WaitSet分类，然后指定WaitSet来进行唤醒
 
 ```bash
@@ -526,82 +549,89 @@ Condition        public final void signal()
 ```
 
 ```java
-package com.erick.multithread.d04;
+package com.erick.multithread.aqs;
 
-import java.util.concurrent.TimeUnit;
+import com.erick.multithread.Sleep;
+import lombok.extern.slf4j.Slf4j;
+
 import java.util.concurrent.locks.Condition;
 import java.util.concurrent.locks.ReentrantLock;
 
-public class Demo03 {
-
-    private static ReentrantLock lock = new ReentrantLock();
-
-    private static Condition boyRoom = lock.newCondition();
-    private static Condition girlRoom = lock.newCondition();
-
-    private static boolean hasCigarette = false;
-
-    private static boolean hasDinner = false;
-
-    public static void main(String[] args) throws InterruptedException {
-        for (int i = 0; i < 5; i++) {
-            int number = i;
-            new Thread("boy " + i) {
-                @Override
-                public void run() {
-                    lock.lock();
-                    while (!hasCigarette) {
-                        try {
-                            System.out.println("没烟，休息" + number);
-                            boyRoom.await();
-                        } catch (InterruptedException e) {
-                            throw new RuntimeException(e);
-                        }
-                    }
-                    try {
-                        System.out.println("有烟，干活" + number);
-                    } finally {
-                        lock.unlock();
-                    }
-                }
-            }.start();
+public class Demo05 {
+    public static void main(String[] args) {
+        MultiWaitService service = new MultiWaitService();
+        for (int i = 0; i < 3; i++) {
+            new Thread(() -> service.boyWork(), "BOY").start();
+            new Thread(() -> service.girlWork(), "GIRL").start();
         }
 
-        for (int i = 0; i < 5; i++) {
-            int number = i;
-            new Thread("girl " + i) {
-                @Override
-                public void run() {
-                    lock.lock();
-                    while (!hasDinner) {
-                        try {
-                            System.out.println("没外卖，休息" + number);
-                            girlRoom.await();
-                        } catch (InterruptedException e) {
-                            throw new RuntimeException(e);
-                        }
-                    }
-                    try {
-                        System.out.println("有外卖，干活" + number);
-                    } finally {
-                        lock.unlock();
-                    }
-                }
-            }.start();
-        }
+        Sleep.sleep(2);
 
-        TimeUnit.SECONDS.sleep(2);
+        new Thread(() -> service.deliverCigarette()).start();
+        Sleep.sleep(2);
+        new Thread(() -> service.deliverDinner()).start();
+
+    }
+}
+
+@Slf4j
+class MultiWaitService {
+    private ReentrantLock lock = new ReentrantLock();
+    private Condition boyRoom = lock.newCondition();
+    private Condition girlRoom = lock.newCondition();
+
+    private boolean hasCigarette = false;
+    private boolean hasDinner = false;
+
+    public void boyWork() {
         try {
             lock.lock();
+            while (!hasCigarette) {
+                try {
+                    log.info("{} 没烟，男人休息", Thread.currentThread().getName());
+                    boyRoom.await();
+                } catch (InterruptedException e) {
+                    throw new RuntimeException(e);
+                }
+                log.info("{} 烟来了，男人干活", Thread.currentThread().getName());
+            }
+        } finally {
+            lock.unlock();
+        }
+    }
+
+    public void girlWork() {
+        try {
+            lock.lock();
+            while (!hasDinner) {
+                try {
+                    log.info("{} 没饭，女人休息", Thread.currentThread().getName());
+                    girlRoom.await();
+                } catch (InterruptedException e) {
+                    throw new RuntimeException(e);
+                }
+                log.info("{} 没饭，女人干活", Thread.currentThread().getName());
+            }
+        } finally {
+            lock.unlock();
+        }
+    }
+
+    public void deliverCigarette() {
+        try {
+            lock.lock();
+            log.info("======================烟来了");
             hasCigarette = true;
             boyRoom.signalAll();
         } finally {
             lock.unlock();
         }
+    }
 
-        TimeUnit.SECONDS.sleep(2);
+    public void deliverDinner() {
         try {
             lock.lock();
+            log.info("======================饭来了");
             hasDinner = true;
             girlRoom.signalAll();
         } finally {

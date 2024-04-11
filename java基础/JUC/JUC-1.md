@@ -2499,6 +2499,715 @@ class TomService {
 }
 ```
 
+# CAS-无锁并发
+
+- CAS需要voliate支持
+
+## 1. 线程不安全
+
+- 可以通过 悲观锁-synchronized，来实现线程间的互斥，实现线程安全
+- 也可以通过无锁并发CAS实现
+
+```java
+package com.erick.multithread.d04;
+
+import lombok.extern.slf4j.Slf4j;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.concurrent.TimeUnit;
+
+@Slf4j
+public class Demo01 {
+    public static void main(String[] args) throws InterruptedException {
+        List<Thread> threads = new ArrayList<>();
+        BankService service = new BankService();
+        for (int i = 0; i < 20; i++) {
+            Thread thread = new Thread(() -> service.drawMoney());
+            thread.start();
+            threads.add(thread);
+        }
+
+        for (Thread thread : threads) {
+            thread.join();
+        }
+        log.info("money={}", service.total);
+    }
+}
+
+@Slf4j
+class BankService {
+    public int total = 10;
+
+    public void drawMoney() {
+        if (total <= 0) {
+            log.info("no money left");
+            return;
+        }
+
+        try {
+            TimeUnit.SECONDS.sleep(1);
+        } catch (InterruptedException e) {
+            throw new RuntimeException(e);
+        }
+
+        total--;
+        log.info("get money");
+    }
+}
+```
+
+## 2.  乐观锁-CAS 
+
+- 不加锁实现共享资源的保护
+- Compare And Set
+- JDK提供了对应的CAS类来实现不加锁
+
+### 2.1 API
+
+```bash
+AtomicInteger
+
+private volatile int value;
+
+# 构造方法
+public AtomicInteger(int initialValue) {
+    value = initialValue;
+}
+
+# 1. 获取最新值
+public final int get();
+
+# 2. 比较，交换
+public final boolean compareAndSet(int expectedValue, int newValue)
+```
+
+```java
+@Slf4j
+class BankService {
+    public AtomicInteger total = new AtomicInteger(10);
+
+    public void drawMoney() {
+        while (true) {
+            int value = total.get(); // 获取最新值
+            if (value <= 0) {
+                log.info("no money left");
+                return;
+            }
+
+            Sleep.sleep(1);
+
+            /*参数一：原来的值
+             * 参数二：变换后的值
+             * 原来的值，一旦被其他线程修改了，是一个volatile修饰的，本线程立刻就会获取到，CAS就会失败，
+             * 就会继续下次循环*/
+            boolean result = total.compareAndSet(value, value - 1);
+            if (result) {
+                break;
+            }
+            log.info("CAS failure");
+        }
+    }
+}
+```
+
+### 2.2 原理
+
+- CAS 必须和 volatile结合使用
+- get()方法获取到的是类的value，被volatile修饰。其他线程修改该变量后，会立刻同步到主存中，方便其他线程的cas操作
+- compareAndSet内部，是通过系统的 lock cmpxchg(x86架构)实现的，也是一种锁
+
+```bash
+public final boolean compareAndSet(int expect, int update) {
+    return unsafe.compareAndSwapInt(this, valueOffset, expect, update);
+}
+```
+
+![image-20230501162303777](https://erick-typora-image.oss-cn-shanghai.aliyuncs.com/img/image-20230501162303777.png)
+
+### 2.3 CAS vs synchronized
+
+```bash
+# 1. 解决方式
+- CAS:             无锁并发(基于内存可见性，不加锁)，无阻塞并发(不会阻塞，上下文切换少)
+- synchronized:    悲观锁，阻塞并发
+
+# 2. 上下文切换
+- CAS即使重试失败，线程一直高速运行
+- synchronized会让线程在没有获取到锁时，进入EntryList，同时发生上下文切换，进入阻塞，影响性能
+
+# 3. cpu核心
+- CAS时，线程一直在运行，如果cpu不够多且当前时间片用完，虽然不会进入阻塞，但依然会发生上下文切换，从而进入可运行状态
+- 最好是线程数少于cpu的核心数目
+
+# 4. 乐观锁适应场景
+- 如果竞争激烈，重试机制必然频发触发，反而性能会收到影响
+```
+
+## 3. 原子整数
+
+- 能够保证修改数据的结果，是线程安全的包装类型
+
+```bash
+# 功能类似
+java.util.concurrent.atomic.AtomicInteger
+java.util.concurrent.atomic.AtomicLong
+java.util.concurrent.atomic.AtomicBoolean
+```
+
+### 3.1 常用方法
+
+- AtomicInteger的下面方法，都是原子性的，利用了CAS思想，简化代码
+
+```bash
+# 1. 自增，自减等操作： 可以基于compareAndSet来实现
+# 自增并返回最新结果: 最新结果可能不一定是自增后的值，比如方法执行前值是2，自增只保证增加了1，但是最新结果可能是14
+public final int incrementAndGet();
+# 获取最新结果并自增: 
+public final int getAndIncrement();
+
+public final int decrementAndGet();
+public final int getAndDecrement();
+public final int getAndAdd(int delta);
+public final int addAndGet(int delta);
+public final int getAndSet(int newValue);
+
+# 2. 复杂操作，自定义操作： 自定义实现cas，要配合while(true)来使用
+public final boolean compareAndSet(int expect, int update);
+
+# 3. 自定义操作的函数式接口，也是基于compareAndSet实现
+public final int updateAndGet(IntUnaryOperator updateFunction);
+public final int getAndUpdate(IntUnaryOperator updateFunction);
+```
+
+### 3.2 自增/自减
+
+- 如果没有判读条件，那么多个线程访问同一个资源，也是线程安全的
+
+```java
+package com.erick.multithread.d04;
+
+import lombok.extern.slf4j.Slf4j;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.concurrent.atomic.AtomicInteger;
+
+@Slf4j
+public class Demo01 {
+    public static void main(String[] args) throws InterruptedException {
+        List<Thread> threads = new ArrayList<>();
+        BankService service = new BankService();
+        for (int i = 0; i < 1000000; i++) {
+            Thread thread = new Thread(() -> service.drawMoneyFirst());
+            thread.start();
+            threads.add(thread);
+        }
+
+        for (Thread thread : threads) {
+            thread.join();
+        }
+        log.info("money={}", service.total.get()); // 结果=0
+    }
+}
+
+@Slf4j
+class BankService {
+
+    /**
+     * 内部维护了一个private volatile int value;
+     * 无参构造为0
+     */
+    public AtomicInteger total = new AtomicInteger(1000000);
+
+    /*每次取一块钱*/
+    public void drawMoneyFirst() {
+        total.getAndDecrement();
+    }
+}
+```
+
+### 3.2 自定义操作
+
+- 如果要控制超额支出问题，必须自定义CAS的while true
+
+#### 方式1 - 普通运算
+
+- 手写while true循环
+
+```java
+@Slf4j
+class BankService {
+
+    public AtomicInteger total = new AtomicInteger(50);
+
+    /*每次取指定钱，带条件判断*/
+    public void drawMoneyFirst(int bucks) {
+        while (true) {
+            int value = total.get();
+            if (value < bucks) {
+                log.info("no money left");
+                break;
+            }
+
+            Sleep.sleep(1);
+
+            boolean result = total.compareAndSet(value, value - bucks);
+            if (result) {
+                break;
+            }
+            log.info("CAS failure");
+        }
+    }
+}
+```
+
+#### 方式2 - 函数式接口
+
+```java
+@Slf4j
+class BankService {
+
+    public AtomicInteger total = new AtomicInteger(50);
+
+    public void drawMoneyFirst() {
+        process(total, new Calculate());
+    }
+
+    private void process(AtomicInteger count, IntUnaryOperator operator) {
+        while (true) {
+            int currentValue = count.get();
+            if (currentValue <= 0) {
+                log.info("zero money");
+                break;
+            }
+            int afterValue = operator.applyAsInt(currentValue);
+            if (afterValue <= 0) {
+                log.info("not enough money");
+                break;
+            }
+            if (count.compareAndSet(currentValue, afterValue)) {
+                log.info("success");
+                break;
+            }
+            log.info("CAS failure");
+        }
+    }
+}
+
+class Calculate implements IntUnaryOperator {
+
+    @Override
+    public int applyAsInt(int operand) {
+        /*可能涉及到复杂运算*/
+        int afterValue = operand - 6;
+        return afterValue;
+    }
+}
+```
+
+## 4. 原子引用
+
+- 基本数据类型满足不了的一些其他计算场景，就要用到原子引用
+- 用法和上面原子整数类似
+
+```bash
+# 比如大数BigDecimal， 商业计算
+
+# 比如其他引用类型，如String
+```
+
+### 4.1 AtomicReference
+
+```java
+@Slf4j
+class AccountService {
+    public AtomicReference<BigDecimal> account = new AtomicReference<>(new BigDecimal("100"));
+
+    public void drawMoney(BigDecimal bucks) {
+        while (true) {
+            BigDecimal prev = account.get();
+            if (prev.compareTo(new BigDecimal("0")) <= 0) {
+                log.info("no money left");
+                break;
+            }
+            BigDecimal next = prev.subtract(bucks);
+            if (next.compareTo(new BigDecimal(0)) <= 0) {
+                log.info("not enough money");
+                break;
+            }
+            if (account.compareAndSet(prev, next)) {
+                log.info("success");
+                break;
+            }
+            log.info("cas failure");
+        }
+    }
+}
+```
+
+### 4.2 AtomicStampedReference
+
+#### ABA场景
+
+- 线程-1在CAS中要将A->B，线程-2在此期间进行A->B->A
+- 线程-1的CAS会成功，但是对比的值，其实已经被改过
+- 一般情况下，ABA并不会影响具体的业务
+
+```java
+package com.erick.multithread.d04;
+
+import com.erick.multithread.Sleep;
+import lombok.extern.slf4j.Slf4j;
+
+import java.util.concurrent.atomic.AtomicReference;
+
+@Slf4j
+public class Demo03 {
+    public static void main(String[] args) throws InterruptedException {
+        JackService jackService = new JackService();
+        Thread firstThread = new Thread(() -> jackService.job());
+        Thread secondThread = new Thread(() -> jackService.work());
+        firstThread.start();
+        secondThread.start();
+        firstThread.join();
+        secondThread.join();
+        log.info(jackService.ref.get());
+    }
+}
+
+@Slf4j
+class JackService {
+    public AtomicReference<String> ref = new AtomicReference<>("A");
+
+    // 第一次就会交换成功
+    public void job() {
+        while (true) {
+            String prev = ref.get();
+            Sleep.sleep(1);
+            if (ref.compareAndSet(prev, "B")) {
+                log.info("success");
+                break;
+            }
+            log.info("cas failure");
+        }
+    }
+
+    public void work() {
+        ref.compareAndSet("A", "B");
+        ref.compareAndSet("B", "A");
+    }
+}
+```
+
+#### ABA解决
+
+- 具体的值和版本号(版本号或者时间戳)
+- 只要其他线程动过了共享变量(通过值和版本号)，就算cas失败
+- 可以通过版本号，得到该值前前后后被改动了多少次
+
+```java
+@Slf4j
+class JackService {
+    /*初试版本号可以设置为0 */
+    public AtomicStampedReference<String> ref = new AtomicStampedReference<>("A", 0);
+
+    // 第一次会交换成功
+    public void job() {
+        while (true) {
+
+            int prevStamp = ref.getStamp();
+            String prevValue = ref.getReference();
+            Sleep.sleep(1);
+            boolean result = ref.compareAndSet(prevValue, "B", prevStamp, prevStamp + 1);
+            if (result) {
+                log.info("success");
+                break;
+            }
+            log.info("cas failure");
+        }
+    }
+
+    public void work() {
+        ref.compareAndSet("A", "B", 0, 1);
+        ref.compareAndSet("B", "A", 1, 2);
+    }
+}
+```
+
+### 4.3 AtomicMarkableReference
+
+- 线程a在执行CAS操作时，其他线程反复修改数据，但是a线程只关心最终的结果是否变化了
+- ABABA场景
+
+```java
+@Slf4j
+class JackService {
+
+    private boolean initialFlag = true;
+    public AtomicMarkableReference<String> ref = new AtomicMarkableReference<>("A", true);
+
+    public void job() {
+        while (true) {
+            String prevValue = ref.getReference();
+
+            Sleep.sleep(1);
+            boolean result = ref.compareAndSet(prevValue, "B", true, false);
+            if (result) {
+                log.info("success");
+                break;
+            }
+            log.info("cas failure");
+        }
+    }
+
+    public void work() {
+        ref.compareAndSet("A", "B", true, false);
+        ref.compareAndSet("B", "A", false, true);
+        ref.compareAndSet("A", "B", true, false);
+        // ref.compareAndSet("B", "A", false, true);
+    }
+}
+```
+
+## 5. 原子数组
+
+- 上述原子整数和原子引用，只是针对一个对象的
+- 原子数组，可以存放上面的数组
+
+### 5.1 不安全
+
+- 可以将数组中的每个元素单独拿出来，通过原子整数来解决
+
+```java
+package com.erick.multithread.d04;
+
+import lombok.extern.slf4j.Slf4j;
+
+import java.util.ArrayList;
+import java.util.List;
+
+public class Demo04 {
+    public static void main(String[] args) throws InterruptedException {
+        BankingService service = new BankingService();
+        List<Thread> threads = new ArrayList<>();
+        for (int i = 0; i < 10; i++) {
+            Thread thread = new Thread(() -> service.change());
+            thread.start();
+            threads.add(thread);
+        }
+
+        for (Thread thread : threads) {
+            thread.join();
+        }
+
+        service.log();
+    }
+}
+
+@Slf4j
+class BankingService {
+    private int[] accounts = new int[2];
+
+    public void change() {
+        for (int i = 0; i < 1000; i++) {
+            accounts[0] = accounts[0] - 1;
+            accounts[1] = accounts[1] + 1;
+        }
+    }
+
+    public void log() {
+        log.info("arr-0={}", accounts[0]);
+        log.info("arr-1={}", accounts[1]);
+    }
+}
+```
+
+### 5.2 原子数组
+
+- AtomicIntegerArray
+- AtomicLongArray
+- AtomicReferenceArray
+
+```java
+@Slf4j
+class BankingService {
+    private AtomicIntegerArray accounts = new AtomicIntegerArray(2);
+
+    public void change() {
+        for (int i = 0; i < 1000; i++) {
+            /*参数一： 索引
+             * 参数二： 改变的值
+              也可以自定义while true循环
+             */
+            accounts.addAndGet(0, 2);
+            accounts.addAndGet(1, -2);
+        }
+    }
+
+    public void log() {
+        log.info("arr-0={}", accounts.get(0));
+        log.info("arr-1={}", accounts.get(1));
+    }
+}
+```
+
+## 6. 原子Filed更新器
+
+- 用来原子更新对象中的字段，该字段必须和volatile结合使用
+
+```bash
+- AtomicReferenceFieldUpdater      # 引用类型字段
+- AtomicLongFieldUpdater           # Long类型字段
+- AtomicIntegerFieldUpdater        # Integer类型字段
+```
+
+```java
+package com.erick.multithread.d04;
+
+import com.erick.multithread.Sleep;
+import lombok.Getter;
+import lombok.Setter;
+import lombok.extern.slf4j.Slf4j;
+
+import java.util.concurrent.atomic.AtomicReferenceFieldUpdater;
+
+@Slf4j
+public class Demo05 {
+    public static void main(String[] args) throws InterruptedException {
+        Student student = new Student();
+        student.setAge(11);
+        student.setName("lucy");
+
+        StudentService service = new StudentService();
+        Thread firstThread = new Thread(() -> service.updateName(student));
+        firstThread.start();
+
+        Sleep.sleep(1);
+
+        Thread secondThread = new Thread(() -> student.setName("nancy"));
+        secondThread.start();
+
+        firstThread.join();
+        secondThread.join();
+
+        log.info(student.name);
+    }
+}
+
+@Slf4j
+class StudentService {
+    private AtomicReferenceFieldUpdater<Student, String> nameField =
+            AtomicReferenceFieldUpdater.newUpdater(Student.class, String.class, "name");
+
+    public void updateName(Student student) {
+        while (true) {
+            /*从lucy改成erick*/
+            String prev = nameField.get(student);
+            String next = "erick";
+
+            Sleep.sleep(2);
+
+            boolean result = nameField.compareAndSet(student, prev, next);
+            if (result) {
+                log.info("success");
+                break;
+            }
+            log.info("cas failure");
+        }
+    }
+}
+
+@Setter
+@Getter
+class Student {
+    private int age;
+    /*是基于反射的，字段必须是public volatile*/
+    public volatile String name;
+}
+```
+
+## 7. 原子累加器
+
+- JDK 8 以后提供了专门的做累加的类，用来提高性能
+- 任务拆分的理念
+
+```bash
+# 原理： 在有竞争的时候，设置多个累加单元， Thread-0 累加 Cell[0], Thread-1累加Cell[1]
+#       累加结束后，将结果进行汇总，这样他们在累加时操作的不同的Cell变量，因此减少了CAS重试失败，从而提高性能
+- LongAdder(long的累加)        ----          AtomicLong(原始long)
+- DoubleAdder
+```
+
+```java
+package com.erick.multithread.d04;
+
+import lombok.Getter;
+import lombok.extern.slf4j.Slf4j;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.atomic.LongAdder;
+
+@Slf4j
+public class Demo06 {
+    public static void main(String[] args) throws InterruptedException {
+        AdderService adderService = new AdderService();
+        adderService.firstMethod();
+        adderService.secondMethod();
+        log.info("{}", adderService.getFirstLong().get());        // 20000000
+        log.info("{}", adderService.getSecondLong().longValue()); // 20000000
+    }
+}
+
+@Slf4j
+class AdderService {
+    @Getter
+    private AtomicLong firstLong = new AtomicLong(0L);
+    @Getter
+    private LongAdder secondLong = new LongAdder();
+
+    public void firstMethod() throws InterruptedException {
+        long start = System.currentTimeMillis();
+        List<Thread> threads = new ArrayList<>();
+        for (int i = 0; i < 10; i++) {
+            Thread thread = new Thread(() -> {
+                for (int j = 0; j < 1000000; j++) {
+                    firstLong.addAndGet(2);
+                }
+            });
+            thread.start();
+            threads.add(thread);
+        }
+
+        for (Thread thread : threads) {
+            thread.join();
+        }
+        log.info("AtomicLong={}", (System.currentTimeMillis() - start)); // 507ms
+    }
+
+    public void secondMethod() throws InterruptedException {
+        long start = System.currentTimeMillis();
+        List<Thread> threads = new ArrayList<>();
+        for (int i = 0; i < 10; i++) {
+            Thread thread = new Thread(() -> {
+                for (int j = 0; j < 1000000; j++) {
+                    secondLong.add(2);
+                }
+            });
+            thread.start();
+            threads.add(thread);
+        }
+
+        for (Thread thread : threads) {
+            thread.join();
+        }
+        log.info("LongAdder={}", (System.currentTimeMillis() - start)); // 46ms
+    }
+}
+```
+
 # 不可变类
 
 ## 1. 日期类
@@ -2508,20 +3217,23 @@ class TomService {
 #### 线程不安全
 
 ```java
-package com.erick.multithread.d07;
+package com.erick.multithread.d04;
+
+import lombok.extern.slf4j.Slf4j;
 
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
 import java.util.Date;
 
-public class Demo03 {
+@Slf4j
+public class Demo07 {
     public static void main(String[] args) {
         SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd");
         for (int i = 0; i < 10; i++) {
             new Thread(() -> {
                 try {
                     Date parse = sdf.parse("2022-03-12");
-                    System.out.println(parse); // 最终结果不一致，或者出现异常
+                    log.info(parse.toString()); // 最终结果不一致，或者出现异常
                 } catch (ParseException e) {
                     throw new RuntimeException(e);
                 }
@@ -2536,13 +3248,16 @@ public class Demo03 {
 - 性能会受到影响
 
 ```java
-package com.erick.multithread.d07;
+package com.erick.multithread.d04;
+
+import lombok.extern.slf4j.Slf4j;
 
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
 import java.util.Date;
 
-public class Demo03 {
+@Slf4j
+public class Demo07 {
     private static Object lock = new Object();
 
     public static void main(String[] args) {
@@ -2552,7 +3267,7 @@ public class Demo03 {
                 try {
                     synchronized (lock) {
                         Date parse = sdf.parse("2022-03-12");
-                        System.out.println(parse); 
+                        log.info(parse.toString());
                     }
                 } catch (ParseException e) {
                     throw new RuntimeException(e);
@@ -2568,21 +3283,23 @@ public class Demo03 {
 - JDK8之后提供了线程安全的类
 
 ```java
-package com.erick.multithread.d07;
+package com.erick.multithread.d04;
+
+import lombok.extern.slf4j.Slf4j;
 
 import java.time.format.DateTimeFormatter;
 import java.time.temporal.TemporalAccessor;
 
-public class Demo04 {
+@Slf4j
+public class Demo07 {
+    private static Object lock = new Object();
+
     public static void main(String[] args) {
         DateTimeFormatter dtf = DateTimeFormatter.ofPattern("yyyy-MM-dd");
         for (int i = 0; i < 10; i++) {
-            new Thread(new Runnable() {
-                @Override
-                public void run() {
-                    TemporalAccessor parse = dtf.parse("2022-09-12");
-                    System.out.println(parse);
-                }
+            new Thread(() -> {
+                TemporalAccessor parse = dtf.parse("2022-09-12");
+                log.info(parse.toString());
             }).start();
         }
     }
@@ -2600,7 +3317,7 @@ public class Demo04 {
 - 里面所有的Field都是final修饰的，保证了不可变，不可被修改：  private final byte[] value;
 - 类被final修饰，保证了String类不会被继承
 
-# 数组保护性拷贝
+# 数组保护性拷贝： 如果String的构造方法是传递了一个数组，实际上是内部创建了一个新的数组
 - 数组类型也是final修饰，如果通过构造传递，实际上是创建了新的数组和对应的String [保护性拷贝]
 ```
 
@@ -2611,6 +3328,7 @@ public class Demo04 {
 ### 3.1 包装类
 
 - Long: 维护了一个静态内部类LongCache, 将一些Long对象进行缓存
+- 热点数据，提前预热
 
 ```java
 // 获取的时候，先从对应的Cache中去找，然后才会创建新的对象
@@ -2731,86 +3449,1123 @@ class ErickConnection {
 }
 ```
 
+# 线程池
 
+## 1. 基本介绍
 
-# left
-
-## 5. Park/Unpark
-
-### 5.1. 基本使用
-
-- 先park，再unpark
-- park后是waiting状态，会释放锁
+### 1.1 引入原因
 
 ```bash
-# 暂停当前线程
-java.util.concurrent.locks.LockSupport
-
-# 在哪个线程中使用，就暂停哪个线程
-public static void park()
-
-# 恢复一个线程
-public static void unpark(Thread thread)
+1. 一个任务过来，一个线程去做。如果每次过来都临时创建新线程，性能低且比较耗费内存
+2. 线程数多于cpu核心，线程切换，要保存原来线程的状态，运行现在的线程，势必会更加耗费资源
+   线程数少于cpu核心，不能很好的利用cpu性能
+   
+3. 充分利用已有线程，去处理原来的任务
 ```
 
+### 1.2. 线程池组件
+
+```bash
+1. 消费者(线程池)：                 保存一定数量线程来处理任务
+2. 生产者：                        客户端源源不断产生的新任务
+3. 阻塞队列(blocking queue)：      平衡消费者和生产者之间，用来保存任务(线程任务) 的一个等待队列
+
+- 生产者：生产任务速度较快，多余的任务要等
+- 消费者：消费任务快，那么线程池中存活的线程等
+```
+
+
+![image-20221012105847884](https://erick-typora-image.oss-cn-shanghai.aliyuncs.com/img/image-20221012105847884.png)
+
+## 2. 自定义线程池
+
+```bash
+# 生产者：拒绝策略
+- 当核心线程已经达到最大值，那么生产者产生的新的任务
+
+- 让生产者自己决定该如何执行当前任务
+       - 不带超时，加入到阻塞队列
+       - 带超时等待，加入到阻塞队列
+       - 让生产者放弃执行任务
+       - 让生产者抛出异常
+       - 让生产者自己执行任务
+       
+# 消费者超时：
+- 线程池的核心线程消费，从阻塞队列中拉取时，超时后则kill当前核心线程
+```
+
+### 2.1 阻塞队列
+
 ```java
-package com.dreamer.multithread.day04;
+package com.erick.multithread.poll;
 
+import lombok.extern.slf4j.Slf4j;
+
+import java.util.LinkedList;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.locks.LockSupport;
+import java.util.concurrent.locks.Condition;
+import java.util.concurrent.locks.ReentrantLock;
 
-public class Demo01 {
-    public static void main(String[] args) throws InterruptedException {
-        Thread slaveThread = new Thread("slave-thread") {
-            @Override
-            public void run() {
-                System.out.println("prepare for PARK....");
-                LockSupport.park();
-                System.out.println("PARK ended");
+@Slf4j
+public class BlockingQueue {
+    private int capacity; // 阻塞队列大小：有界队列
+    private LinkedList<Runnable> queue = new LinkedList<>(); // 保存任务
+    private ReentrantLock lock = new ReentrantLock();
+    private Condition producerRoom = lock.newCondition(); // 生产者等待
+    private Condition consumerRoom = lock.newCondition();  // 线程池消费者等待
+
+    public BlockingQueue(int capacity) {
+        this.capacity = capacity;
+    }
+
+    /*offer: 添加任务的方法，不会和线程池直接作用，而是通过rejectPolicy交互*/
+    public boolean offer(Runnable task) {
+        try {
+            lock.lock();
+            while (queue.size() == capacity) {
+                try {
+                    producerRoom.await();
+                } catch (InterruptedException e) {
+                    throw new RuntimeException(e);
+                }
             }
-        };
-        slaveThread.start();
 
-        TimeUnit.SECONDS.sleep(2);
+            queue.addFirst(task);
+            consumerRoom.signalAll();
+            return false;
+        } finally {
+            lock.unlock();
+        }
+    }
 
-        LockSupport.unpark(slaveThread);
+    public boolean offer(Runnable task, long timeout, TimeUnit timeUnit) {
+        if (timeout <= 0 || timeUnit == null) {
+            return offer(task);
+        }
+
+        try {
+            lock.lock();
+            long nanos = timeUnit.toNanos(timeout); // 时间转换
+            while (queue.size() == capacity) {
+                if (nanos <= 0) {
+                    return false;
+                }
+                try {
+                    nanos = producerRoom.awaitNanos(nanos); // 等待并且重新赋值
+                } catch (InterruptedException e) {
+                    throw new RuntimeException(e);
+                }
+            }
+
+            queue.addFirst(task);
+            consumerRoom.signalAll();
+            return true;
+        } finally {
+            lock.unlock();
+        }
+    }
+
+    /*线程池消费者： 从阻塞队列中获取任务，一直死等*/
+    public Runnable poll() {
+        try {
+            lock.lock();
+            while (queue.isEmpty()) {
+                try {
+                    consumerRoom.await();
+                } catch (InterruptedException e) {
+                    throw new RuntimeException(e);
+                }
+            }
+            Runnable task = queue.removeLast();
+            producerRoom.signalAll();
+            return task;
+        } finally {
+            lock.unlock();
+        }
+    }
+
+    /*线程池消费者： 从阻塞队列中获取任务，超时则返回null, 如果获取到的是null,则kill线程池的线程并从池中释放*/
+    public Runnable poll(long timeout, TimeUnit timeUnit) {
+        if (timeout <= 0 || timeUnit == null) {
+            return poll();
+        }
+
+        try {
+            lock.lock();
+            long nanos = timeUnit.toNanos(timeout);
+            while (queue.isEmpty()) {
+                if (nanos <= 0) {
+                    return null;
+                }
+                try {
+                    nanos = consumerRoom.awaitNanos(nanos);
+                } catch (InterruptedException e) {
+                    throw new RuntimeException(e);
+                }
+            }
+
+            Runnable task = queue.removeLast();
+            producerRoom.signalAll();
+            return task;
+        } finally {
+            lock.unlock();
+        }
+    }
+
+    public int getSize() {
+        try {
+            lock.lock();
+            return queue.size();
+        } finally {
+            lock.unlock();
+        }
     }
 }
 ```
 
-### 5.2. 先unpark后park
-
-- 先unpark，再park，线程就不会停下来了
+### 2.2 线程池
 
 ```java
-package com.dreamer.multithread.day04;
+package com.erick.multithread.poll;
 
-import java.util.concurrent.locks.LockSupport;
+import lombok.extern.slf4j.Slf4j;
+
+import java.util.HashSet;
+import java.util.Set;
+import java.util.concurrent.TimeUnit;
+
+@Slf4j
+public class ThreadPool {
+    private int capacity; // 阻塞队列大小
+    private BlockingQueue blockingQueue;
+    private int coreThreadSize; // 线程池核心线程数大小
+    private long timeout; // 消费任务时，超时时间, 超时则kill掉当前线程池的当前线程
+    private TimeUnit timeUnit;
+    private RejectPolicy rejectPolicy; // 拒绝策略
+
+    /*线程池中保存核心线程的*/
+    private final Set<Worker> threadPool = new HashSet<>();
+
+    public ThreadPool(int capacity, int coreThreadSize, long timeout, TimeUnit timeUnit, RejectPolicy rejectPolicy) {
+        blockingQueue = new BlockingQueue(capacity);
+        this.coreThreadSize = coreThreadSize;
+        this.timeout = timeout;
+        this.timeUnit = timeUnit;
+        this.rejectPolicy = rejectPolicy;
+    }
+
+    /**
+     * 任务执行：
+     * 如果核心线程数<池子中线程数量，
+     * 1. 创建新的工作线程
+     * 2. 开启工作线程(执行当前task，执行完毕后去阻塞队列中获取)
+     * 3. 当前工作线程加入到线程池中
+     * 如果核心线程数=池子中线程数量，则将当前任务添加到阻塞队列中
+     */
+    public synchronized void executeTask(Runnable task) {
+        if (threadPool.size() >= coreThreadSize) {
+            /*根据一定的拒绝策略，会将任务加在阻塞队列中*/
+            log.info("maximum core thread");
+            rejectPolicy.reject(task, blockingQueue);
+        } else {
+            Worker worker = new Worker(task);
+            log.info("create new thread={}", worker);
+            threadPool.add(worker); // 加入到线程池中
+            worker.start(); // 开始运行线程
+        }
+    }
+
+    class Worker extends Thread {
+        private Runnable task;
+
+        public Worker(Runnable task) {
+            this.task = task;
+        }
+
+        @Override
+        public void run() {
+            while (task != null) {
+                task.run(); // 执行完当前任务
+                task = blockingQueue.poll(timeout, timeUnit); // 继续从阻塞队列中去取
+            }
+
+            /*执行完毕后，将该线程从线程池中移除*/
+            synchronized (threadPool) {
+                System.out.println("thread-destroyed");
+                threadPool.remove(this);
+            }
+        }
+    }
+}
+```
+
+### 2.3 拒绝策略
+
+```java
+package com.erick.multithread.poll;
+
+import lombok.extern.slf4j.Slf4j;
+
+import java.util.concurrent.TimeUnit;
+
+public interface RejectPolicy {
+    void reject(Runnable task, BlockingQueue blockingQueue);
+}
+
+/*生产者死等：一定要把任务添加到阻塞队列中*/
+class WaitForeverAddToQueuePolicy implements RejectPolicy {
+
+    @Override
+    public void reject(Runnable task, BlockingQueue blockingQueue) {
+        blockingQueue.offer(task);
+    }
+}
+
+/*生产者超时等待：等待把任务添加到阻塞队列中，超时则放弃该任务*/
+class WaitWithTimeoutAddToQueuePolicy implements RejectPolicy {
+
+    private TimeUnit timeUnit;
+    private long timeout;
+
+    @Override
+    public void reject(Runnable task, BlockingQueue blockingQueue) {
+        blockingQueue.offer(task, timeout, timeUnit);
+    }
+}
+
+/*生产者放弃任务*/
+@Slf4j
+class AbortPolicy implements RejectPolicy {
+
+    @Override
+    public void reject(Runnable task, BlockingQueue blockingQueue) {
+        log.info("abort the task");
+    }
+}
+
+/*生产者自己执行任务*/
+class ProducerExecutePolicy implements RejectPolicy {
+
+    @Override
+    public void reject(Runnable task, BlockingQueue blockingQueue) {
+        new Thread(task).start();
+    }
+}
+
+/*生产者异常:后续其他任务不能再进来了*/
+class ProducerExceptionPolicy implements RejectPolicy {
+
+    @Override
+    public void reject(Runnable task, BlockingQueue blockingQueue) {
+        throw new RuntimeException("core thread is working, current task can not work");
+    }
+}
+```
+
+### 2.4 测试代码
+
+```java
+package com.erick.multithread.poll;
+
+import com.erick.multithread.Sleep;
+import lombok.extern.slf4j.Slf4j;
+
+import java.util.concurrent.TimeUnit;
+
+@Slf4j
+public class Test {
+    public static void main(String[] args) {
+        ThreadPool pool =
+                new ThreadPool(5, 3, 4, TimeUnit.SECONDS, new WaitForeverAddToQueuePolicy());
+
+        for (int i = 0; i < 10; i++) {
+            int j = i;
+            pool.executeTask(() -> {
+                Sleep.sleep(2);
+                log.info("{}---{}号---任务被执行", Thread.currentThread().getName(), j);
+            });
+        }
+    }
+}
+```
+
+## 3. JDK线程池
+
+### 3.1 类图
+
+![ScheduledExecutorService](https://erick-typora-image.oss-cn-shanghai.aliyuncs.com/img/ScheduledExecutorService.png)
+
+### 3.2 线程状态
+
+- ThreadPoolExecutor 使用int的高3位来表示线程池状态，低29位表示线程数量
+
+| 状态       | 高3位 | 接受新任务 | 处理阻塞任务        | 说明                                |
+| ---------- | ----- | ---------- | ------------------- | ----------------------------------- |
+| RUNNING    | 111   | Y          | Y                   |                                     |
+| SHUTDOWN   | 000   | N          | Y                   |                                     |
+| STOP       | 001   | N          | N(抛弃阻塞队列任务) |                                     |
+| TIDYING    | 010   | -          | -                   | 任务执行完毕，活动线程为0，即将终结 |
+| TERMINATED | 011   | -          | -                   | 终结状态                            |
+
+### 3.3 线程数量
+
+- 过小：CPU不能充分利用
+- 过大：线程上下文切换浪费性能，每个线程也要占用内存导致占用内存过多
+
+#### CPU密集型
+
+- 线程的任务主要是和CPU打交道，比如大数据运算
+- 线程数量： 核心数+1
+- +1: 保证某线程由于某些原因(操作系统方面)导致暂停时，额外线程可以启动，不浪费CPU资源
+
+#### IO密集型
+
+- IO操作，RPC调用，数据库访问时，CPU是空闲的，称为IO密集型
+- 更加常见： IO操作，远程RPC调用，数据库操作
+- 线程数 = 核数 * 期望cpu利用率 *  (CPU计算时间 + CPU等待时间) / CPU 计算时间
+
+![image-20221018104629282](https://erick-typora-image.oss-cn-shanghai.aliyuncs.com/img/image-20221018104629282.png)
+
+## 4. ThreadPoolExecutor
+
+- 常见的线程池
+
+### 4.1 构造方法
+
+```java
+int corePoolSize:                     // 核心线程数
+int maximumPoolSize：                 // 最大线程数
+long keepAliveTime：                  // 救急线程数执行任务完后存活时间
+TimeUnit unit：                       
+BlockingQueue<Runnable> workQueue：   // 阻塞队列: 有界或者无界
+ThreadFactory threadFactory：         // 线程生产工厂，为线程起名字
+RejectedExecutionHandler handler：    // 拒绝策略 
+
+public ThreadPoolExecutor(int corePoolSize,
+                          int maximumPoolSize,
+                          long keepAliveTime,
+                          TimeUnit unit,
+                          BlockingQueue<Runnable> workQueue,
+                          ThreadFactory threadFactory,
+                          RejectedExecutionHandler handler){
+}
+```
+
+### 4.2 核心线程和救急线程
+
+```bash
+# 核心线程
+- 执行完任务后，会继续保留在线程池中
+
+# 救急线程：
+- 如果阻塞队列已满，并且没有空余的核心线程。那么会创建救急线程来执行任务
+- 任务执行完毕后，这个线程就会被销毁(临时工)
+- 必须是有界阻塞，如果是无界队列，则不需要创建救急线程
+```
+
+### 4.3 拒绝策略
+
+- 核心线程满负荷，阻塞队列(有界队列)已满，无空余救急线程，才会执行拒绝策略，JDK 提供了4种拒绝策略
+
+```bash
+- RejectedExecutionHandler     # 拒绝策略接口
+
+- AbortPolicy:                 # 调用者抛出RejectedExecutionException,  默认策略
+- CallerRunsPolicy:            # 调用者运行任务
+- DiscardPolicy:               # 放弃本次任务
+- DiscardOldestPolicy:         # 放弃阻塞队列中最早的任务，本任务取而代之
+
+# 第三方框架的技术实现
+- Dubbo: 在抛出异常之前，记录日志，并dump线程栈信息，方便定位问题
+- Netty: 创建一个新的线程来执行任务
+- ActiveMQ: 带超时等待(60s)， 尝试放入阻塞队列
+```
+
+![image-20221018075430425](https://erick-typora-image.oss-cn-shanghai.aliyuncs.com/img/image-20221018075430425.png)
+
+## 5. Executors
+
+- 默认的构造方法来创建线程池，参数过多，JDK提供了工厂方法，来创建线程池
+
+### 5.1 newFixedThreadPool
+
+- 固定大小
+- 核心线程数 = 最大线程数，救急线程数为0
+- 阻塞队列：无界，可以存放任意数量的任务
+
+```bash
+# 应用场景
+任务量已知，但是线程执行时间较长
+执行任务后，线程并不会结束
+```
+
+```java
+public static ExecutorService newFixedThreadPool(int nThreads) {
+    return new ThreadPoolExecutor(nThreads, nThreads,
+                                  0L, TimeUnit.MILLISECONDS,
+                                  new LinkedBlockingQueue<Runnable>());
+}
+```
+
+```java
+package com.erick.multithread.d05;
+
+import com.erick.multithread.Sleep;
+import lombok.extern.slf4j.Slf4j;
+
+import java.util.concurrent.Executors;
+import java.util.concurrent.ThreadPoolExecutor;
+
+@Slf4j
+public class Demo01 {
+    public static void main(String[] args) {
+        ThreadPoolExecutor pool = (ThreadPoolExecutor) Executors.newFixedThreadPool(3);
+
+        for (int i = 0; i < 5; i++) {
+            pool.execute(() -> {
+                Sleep.sleep(3);
+                log.info("{} execute task", Thread.currentThread().getName());
+            });
+        }
+    }
+}
+```
+
+### 5.2 newCachedThreadPool
+
+- SynchronousQueue: 没有容量，没有线程来取的时候是放不进去的
+- 整个线程池数会随着任务数目增长，1分钟后没有其他活动会消亡
+
+```bash
+# 应用场景
+1. 时间较短的线程
+2. 任务数量大，任务执行时间长，会造成  OutOfMmeory问题
+```
+
+```java
+// 1.核心线程数为0, 最大线程数为Integer的无限大
+// 2. 全部是救急线程，等待时间是60s，60s后就会消亡
+public static ExecutorService newCachedThreadPool() {
+    return new ThreadPoolExecutor(0, Integer.MAX_VALUE,
+                                  60L, TimeUnit.SECONDS,
+                                  new SynchronousQueue<Runnable>());
+}
+```
+
+```java
+package com.erick.multithread.d05;
+
+import com.erick.multithread.Sleep;
+import lombok.extern.slf4j.Slf4j;
+
+import java.util.concurrent.Executors;
+import java.util.concurrent.ThreadPoolExecutor;
+
+@Slf4j
+public class Demo01 {
+    public static void main(String[] args) {
+        ThreadPoolExecutor pool = (ThreadPoolExecutor) Executors.newCachedThreadPool();
+         
+        // 任务执行完成后60s，线程死亡 
+        for (int i = 0; i < 5; i++) {
+            pool.execute(() -> {
+                Sleep.sleep(5);
+                log.info("{} execute task", Thread.currentThread().getName());
+            });
+        }
+    }
+}
+```
+
+### 5.3.  newSingleThreadExecutor
+
+- 线程池大小始终为1个，不能改变线程数
+- 相比自定义一个线程来执行，线程池可以保证前面任务的失败，不会影响到后续任务
+- 线程不会死亡
+
+```bash
+# 1. 和自定义线程的区别
+自定义线程：  执行多个任务时，一个出错，后续都能不能执行了
+单线程池：    一个任务失败后，会结束出错线程。重新new一个线程来执行下面的任务
+
+# 2. 执行顺序
+单线程池： 保证所有任务都是串行
+
+# 3. 和newFixedThreadPool的区别
+newFixedThreadPool:          初始化后，还可以修改线程大小
+newSingleThreadExecutor:     不可以修改
+```
+
+```java
+public static ExecutorService newSingleThreadExecutor() {
+    return new FinalizableDelegatedExecutorService
+        (new ThreadPoolExecutor(1, 1,
+                                0L, TimeUnit.MILLISECONDS,
+                                new LinkedBlockingQueue<Runnable>()));
+}
+```
+
+```java
+package com.erick.multithread.d05;
+
+import com.erick.multithread.Sleep;
+import lombok.extern.slf4j.Slf4j;
+
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+
+@Slf4j
+public class Demo01 {
+    static ExecutorService pool = Executors.newSingleThreadExecutor();
+
+    public static void main(String[] args) {
+        method2();
+    }
+
+    public static void method1() {
+        for (int i = 0; i < 3; i++) {
+            pool.execute(() -> {
+                Sleep.sleep(1);
+                // 每次都是创建一个新的线程
+                log.info("{} execute task", Thread.currentThread().getName());
+                int num = 1 / 0;
+            });
+        }
+    }
+
+    /*同一个线程执行：任务串行*/
+    public static void method2() {
+        ExecutorService pool = Executors.newSingleThreadExecutor();
+        for (int i = 0; i < 3; i++) {
+            pool.execute(() -> {
+                Sleep.sleep(1);
+                log.info("{} execute task", Thread.currentThread().getName());
+            });
+        }
+    }
+}
+```
+
+### 5.4 newScheduledThreadPool
+
+```java
+public static ScheduledExecutorService newScheduledThreadPool(int corePoolSize) {
+    return new ScheduledThreadPoolExecutor(corePoolSize);
+}
+```
+
+#### 延时执行
+
+```java
+package com.erick.multithread.d05;
+
+import lombok.extern.slf4j.Slf4j;
+
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
+
+@Slf4j
+public class Demo01 {
+
+    public static void main(String[] args) {
+        log.info("coming");
+        method3();
+    }
+
+    /*2个核心线程：分别延迟1s和3s后执行*/
+    private static void method1() {
+        ScheduledExecutorService scheduledExecutorService = Executors.newScheduledThreadPool(2);
+
+        scheduledExecutorService.schedule(() -> log.info("{} execute task", Thread.currentThread().getName()),
+                1, TimeUnit.SECONDS);
+
+        scheduledExecutorService.schedule(() -> log.info("{} execute task", Thread.currentThread().getName()),
+                3, TimeUnit.SECONDS);
+    }
+
+    /*1个核心线程，串行*/
+    private static void method2() {
+        ScheduledExecutorService scheduledExecutorService = Executors.newScheduledThreadPool(1);
+
+        scheduledExecutorService.schedule(() -> log.info("{} execute task", Thread.currentThread().getName()),
+                1, TimeUnit.SECONDS);
+
+        scheduledExecutorService.schedule(() -> log.info("{} execute task", Thread.currentThread().getName()),
+                3, TimeUnit.SECONDS);
+    }
+
+    /*1个核心线程：其中一个出错，会开启一个新的核心线程来处理*/
+    private static void method3() {
+        ScheduledExecutorService scheduledExecutorService = Executors.newScheduledThreadPool(1);
+
+        scheduledExecutorService.schedule(() -> log.info("{} execute task", Thread.currentThread().getName()),
+                1, TimeUnit.SECONDS);
+
+        scheduledExecutorService.schedule(() -> {
+            int a = 1 / 0;
+        }, 1, TimeUnit.SECONDS);
+
+        scheduledExecutorService.schedule(() -> log.info("{} execute task", Thread.currentThread().getName()),
+                3, TimeUnit.SECONDS);
+    }
+}
+```
+
+#### 定时执行
+
+```bash
+# scheduleAtFixedRate
+- 如果任务的执行时间大于时间间隔，就会紧接着立刻执行
+
+public ScheduledFuture<?> scheduleAtFixedRate(Runnable command,
+                                              long initialDelay,
+                                              long period,
+                                              TimeUnit unit);
+
+# scheduleWithFixedDelay
+- 上一个任务执行完毕后，再延迟一定的时间才会执行
+
+public ScheduledFuture<?> scheduleWithFixedDelay(Runnable command,
+                                                 long initialDelay,
+                                                 long delay,
+                                                 TimeUnit unit);
+```
+
+```java
+package com.dreamer.multithread.day09;
+
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
+
+public class Demo07 {
+    public static void main(String[] args) {
+        ScheduledExecutorService pool = Executors.newScheduledThreadPool(2);
+
+        // 定时执行任务
+        pool.scheduleWithFixedDelay(new Runnable() {
+            @Override
+            public void run() {
+                try {
+                    TimeUnit.SECONDS.sleep(2);
+                } catch (InterruptedException e) {
+                    e.printStackTrace();
+                }
+                System.out.println("task is running");
+            }
+        }, 3, 2, TimeUnit.SECONDS);
+        //  初始延时，   任务间隔时间，    任务间隔时间单位
+    }
+}
+```
+
+## 6. 提交任务
+
+```bash
+# 1. execute
+void execute(Runnable command);
+
+# 2. submit: 可以从 Future 对象中获取一些执行任务的最终结果
+Future<?> submit(Runnable task);
+<T> Future<T> submit(Runnable task, T result);
+<T> Future<T> submit(Callable<T> task);
+
+# 3. invokeAll: 执行集合中的所有的任务
+<T> List<Future<T>> invokeAll(Collection<? extends Callable<T>> tasks)
+    throws InterruptedException;
+    
+# 4. invokeAny: 集合中之要有一个任务执行完毕，其他任务就不再执行
+ <T> T invokeAny(Collection<? extends Callable<T>> tasks)
+        throws InterruptedException, ExecutionException;
+```
+
+```java
+package com.nike.erick.d07;
+
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.List;
+import java.util.concurrent.Callable;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
+
+public class Demo02 {
+    public static void main(String[] args) throws InterruptedException, ExecutionException {
+        ExecutorService pool = Executors.newFixedThreadPool(10);
+        method05(pool);
+    }
+
+    /* void execute(Runnable command) */
+    public static void method01(ExecutorService pool) {
+        pool.execute(() -> System.out.println(Thread.currentThread().getName() + " running"));
+    }
+
+    /*  <T> Future<T> submit(Runnable task, T result)
+     * Future<?> submit(Runnable task) */
+    public static void method02(ExecutorService pool) throws InterruptedException {
+        Future<?> result = pool.submit(new Thread(() -> System.out.println(Thread.currentThread().getName() + " running")));
+        TimeUnit.SECONDS.sleep(1);
+        System.out.println(result.isDone());
+        System.out.println(result.isCancelled());
+    }
+
+    /*
+     * <T> Future<T> submit(Callable<T> task)*/
+    public static void method03(ExecutorService pool) throws InterruptedException, ExecutionException {
+        Future<String> submit = pool.submit(() -> "success");
+        TimeUnit.SECONDS.sleep(1);
+        System.out.println(submit.isDone());
+        System.out.println(submit.isCancelled());
+        System.out.println(submit.get()); // 返回结果是success
+    }
+
+    /* <T> List<Future<T>> invokeAll(Collection<? extends Callable<T>> tasks) throws InterruptedException;*/
+    public static void method04(ExecutorService pool) throws InterruptedException {
+        Collection tasks = new ArrayList();
+        for (int i = 0; i < 10; i++) {
+            int round = i;
+            tasks.add((Callable) () -> {
+                System.out.println(Thread.currentThread().getName() + " running");
+                return "success:" + round;
+            });
+        }
+        List results = pool.invokeAll(tasks);
+
+        TimeUnit.SECONDS.sleep(1);
+        System.out.println(results);
+    }
+
+    /*
+     *     <T> T invokeAny(Collection<? extends Callable<T>> tasks) throws InterruptedException, ExecutionException;
+     * */
+    public static void method05(ExecutorService pool) throws InterruptedException, ExecutionException {
+        ExecutorService service = Executors.newFixedThreadPool(1);
+        Collection<Callable<String>> tasks = new ArrayList<>();
+
+        tasks.add(() -> {
+            System.out.println("first task");
+            TimeUnit.SECONDS.sleep(1);
+            return "success";
+        });
+
+        tasks.add(() -> {
+            System.out.println("second task");
+            TimeUnit.SECONDS.sleep(2);
+            return "success";
+        });
+
+
+        tasks.add(() -> {
+            System.out.println("third task");
+            TimeUnit.SECONDS.sleep(3);
+            return "success";
+        });
+        // 任何一个任务执行完后，就会返回结果
+        String result = pool.invokeAny(tasks);
+        System.out.println(result);
+    }
+}
+```
+
+## 7. 异常处理
+
+```bash
+# 不处理
+- 任务执行过程中，业务中的异常并不会抛出
+
+# 任务执行者处理
+
+# 线程池处理
+```
+
+```java
+package com.erick.multithread.d05;
+
+import com.erick.multithread.Sleep;
+import lombok.extern.slf4j.Slf4j;
+
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+
+@Slf4j
+public class Demo01 {
+
+    public static void main(String[] args) throws ExecutionException, InterruptedException {
+        log.info("coming");
+        method04();
+    }
+
+    /*会抛出异常，终止原来的线程，开启新的线程*/
+    public static void method01() {
+        ExecutorService pool = Executors.newFixedThreadPool(1);
+        pool.execute(() -> {
+            log.info("{} executing", Thread.currentThread().getName());
+            int i = 1 / 0;
+        });
+
+        pool.execute(() -> {
+            log.info("{} executing", Thread.currentThread().getName());
+        });
+    }
+
+    /*不处理异常*/
+    public static void method02() {
+        ExecutorService pool = Executors.newFixedThreadPool(1);
+        pool.submit(() -> {
+            int i = 1 / 0;
+        });
+    }
+
+    /*调用者自己处理*/
+    public static void method03() {
+        ExecutorService pool = Executors.newFixedThreadPool(1);
+        pool.submit(() -> {
+            try {
+                int i = 1 / 0;
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
+        });
+    }
+
+    /*线程池处理*/
+    public static void method04() throws ExecutionException, InterruptedException {
+        ExecutorService pool = Executors.newFixedThreadPool(1);
+        Future<?> result = pool.submit(() -> {
+            int i = 1 / 0;
+        });
+        Sleep.sleep(1);
+        // 获取结果的时候，就可以把线程执行任务过程中的异常报出来
+        log.info("{}", result.get());
+    }
+}
+```
+
+## 8. 关闭线程池
+
+```bash
+# shutdown:      void shutdown();
+- 将线程池的状态改变为SHUTDOWN状态
+- 不会接受新任务，已经提交的任务不会停止
+- 不会阻塞调用线程的执行
+
+# shutdownNow:    List<Runnable> shutdownNow();
+-  不会接受新任务
+-  没执行的任务会打断
+-  将等待队列中的任务返回
+```
+
+```java
+package com.erick.multithread.d02;
+
+import com.erick.multithread.util.Sleep;
+
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 public class Demo01 {
     public static void main(String[] args) {
-        Thread slaveThread = new Thread("slave-thread") {
-            @Override
-            public void run() {
-                LockSupport.unpark(Thread.currentThread());
-                System.out.println("prepare for PARK....");
-                LockSupport.park();
-                System.out.println("PARK ended");
-            }
-        };
-        slaveThread.start();
+        ExecutorService pool = Executors.newFixedThreadPool(1);
+        pool.execute(() -> {
+            System.out.println("first");
+            Sleep.sleep(2);
+        });
+
+        pool.execute(() -> {
+            System.out.println("second");
+            Sleep.sleep(2);
+        });
+
+        pool.execute(() -> {
+            System.out.println("third");
+            Sleep.sleep(2);
+        });
+        pool.shutdown();//任务都会执行完毕
+        System.out.println("main ending"); // 不阻塞调用线程的执行
     }
 }
 ```
 
-### 5.3 wait/park
+```java
+package com.erick.multithread.d02;
 
-```bash
-# 二者都会使线程进入waitset等待，都会释放锁
+import com.erick.multithread.util.Sleep;
 
-wait/notify是Object的方法                    park/unpark是LockSupport
-wait/notify 必须和synchronized结合使用        park/unpark不必
-wait/notify 顺序不能颠倒                      park/unpark可以颠倒
-wait/notify 只能随机唤醒一个或者全部唤醒         park/unpark可以指定一个线程唤醒
+import java.util.List;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+
+public class Demo01 {
+    public static void main(String[] args) {
+        ExecutorService pool = Executors.newFixedThreadPool(1);
+        pool.execute(() -> {
+            System.out.println("first");
+            Sleep.sleep(2);
+        });
+
+        pool.execute(() -> {
+            System.out.println("second");
+            Sleep.sleep(2);
+        });
+
+        pool.execute(() -> {
+            System.out.println("third");
+            Sleep.sleep(2);
+        });
+        List<Runnable> leftOver = pool.shutdownNow();
+        System.out.println(leftOver.size());// 剩余任务为2，正在执行的任务被打断
+        System.out.println("main ending"); // 不阻塞调用线程的执行
+    }
+}
 ```
 
+## 9. 异步模式-工作线程
+
+### 9.1 Worker Thread 
+
+- 让有限的工作线程来轮流异步处理无限多的任务
+- 不同的任务类型应该使用不同的线程池
+
+### 9.2 饥饿问题
+
+- 单个固定大小线程池，处理不同类型的任务时，会有饥饿现象
+
+```bash
+# 假设线程池包含2个线程
+- 一个线程负责洗菜，一个线程负责做饭， 
+- 线程任务：洗菜-->再做饭(同步等待结果)，才算结束
+- 1个菜，   刚好2个线程都可以运行
+- 2个菜，   那么两个线程都洗菜，但没线程做饭，就会出现线程饥饿
+```
+
+```java
+package com.erick.multithread.d05;
+
+import com.erick.multithread.Sleep;
+import lombok.extern.slf4j.Slf4j;
+
+import java.util.concurrent.*;
+
+public class Demo02 {
+    public static void main(String[] args) {
+        CookingService cookingService = new CookingService();
+        cookingService.hungryDeal();
+    }
+}
+
+@Slf4j
+class CookingService {
+
+    /*正常情况*/
+    public void normalDeal() {
+        ExecutorService pool = Executors.newFixedThreadPool(2);
+        // 只有一道菜
+        prepareFood(pool);
+    }
+
+    /*线程饥饿*/
+    public void hungryDeal() {
+        ExecutorService pool = Executors.newFixedThreadPool(2);
+        //  多道菜
+        for (int i = 0; i < 5; i++) {
+            prepareFood(pool);
+        }
+    }
+
+    public void prepareFood(ExecutorService pool) {
+        pool.execute(new Runnable() {
+            @Override
+            public void run() {
+                log.info("{} prepare", Thread.currentThread().getName());
+                Future<String> firstJob = pool.submit(new Callable<String>() {
+                    @Override
+                    public String call() throws Exception {
+                        washVegetables();
+                        return "干净的菜";
+                    }
+                });
+                /*同步等待结果*/
+                String washResult;
+                try {
+                    washResult = firstJob.get();
+                } catch (InterruptedException | ExecutionException e) {
+                    throw new RuntimeException(e);
+                }
+                cookVegetables(washResult);
+                log.info("food is ready");
+            }
+        });
+    }
+
+    private void washVegetables() {
+        log.info("{}---洗菜中", Thread.currentThread().getName());
+        Sleep.sleep(2);
+    }
+
+    private void cookVegetables(String washedVegetable) {
+        log.info("{}----做饭中", Thread.currentThread().getName());
+        Sleep.sleep(2);
+    }
+}
+
+```
+
+### 9.3 饥饿解决
+
+- 增加线程池的线程数量，但是不能从根本解决问题
+- 不同的任务类型，使用不同的线程池
+
+```java
+@Slf4j
+class CookingService {
+    public void process() {
+        ExecutorService washPool = Executors.newFixedThreadPool(2);
+        ExecutorService cookPool = Executors.newFixedThreadPool(2);
+        //  多道菜
+        for (int i = 0; i < 5; i++) {
+            prepareFood(washPool, cookPool);
+        }
+    }
+
+    public void prepareFood(ExecutorService washPool, ExecutorService cookPool) {
+        cookPool.execute(new Runnable() {
+            @Override
+            public void run() {
+                log.info("{} prepare", Thread.currentThread().getName());
+                Future<String> firstJob = washPool.submit(new Callable<String>() {
+                    @Override
+                    public String call() throws Exception {
+                        washVegetables();
+                        return "干净的菜";
+                    }
+                });
+                /*同步等待结果*/
+                String washResult;
+                try {
+                    washResult = firstJob.get();
+                } catch (InterruptedException | ExecutionException e) {
+                    throw new RuntimeException(e);
+                }
+                cookVegetables(washResult);
+                log.info("food is ready");
+            }
+        });
+    }
+
+    private void washVegetables() {
+        log.info("{}---洗菜中", Thread.currentThread().getName());
+        Sleep.sleep(2);
+    }
+
+    private void cookVegetables(String washedVegetable) {
+        log.info("{}----做饭中", Thread.currentThread().getName());
+        Sleep.sleep(2);
+    }
+}
+```
