@@ -1728,6 +1728,186 @@ class MessageBroker {
 }
 ```
 
+# Park/UnPark
+
+```java
+// java.util.concurrent.locks.LockSupport 包的方法
+
+// 暂停当前线程，线程一直生存，直到被打断才会继续往下执行
+public static void park() {
+    U.park(false, 0L);
+}
+
+// 恢复某个线程的运行
+public static void unpark(Thread thread) {
+    if (thread != null)
+        U.unpark(thread);
+}
+```
+
+## 1. 基本使用
+
+```java
+package com.erick.multithread.d01;
+
+import com.erick.multithread.Sleep;
+import lombok.extern.slf4j.Slf4j;
+
+import java.util.concurrent.locks.LockSupport;
+
+@Slf4j
+public class Demo01 {
+    public static void main(String[] args) {
+        Thread thread = new Thread(new Runnable() {
+            @Override
+            public void run() {
+                log.info("start");
+                LockSupport.park();
+                log.info("end");
+            }
+        });
+
+        thread.start();
+
+        Sleep.sleep(2);
+        log.info("main unPark");
+        LockSupport.unpark(thread);
+    }
+}
+```
+
+## 2. 带锁实现
+
+- park不会释放当前锁，类似sleep
+
+```java
+package com.erick.multithread.d01;
+
+import com.erick.multithread.Sleep;
+import lombok.extern.slf4j.Slf4j;
+
+import java.util.concurrent.locks.LockSupport;
+
+@Slf4j
+public class Demo01 {
+    private static final Object lock = new Object();
+
+    public static void main(String[] args) {
+        Thread firstThread = new Thread(() -> {
+            synchronized (lock) {
+                log.info("{} start", Thread.currentThread().getName());
+                LockSupport.park();
+                log.info("{} end", Thread.currentThread().getName());
+            }
+        });
+
+        Thread secondThread = new Thread(() -> {
+            synchronized (lock) {
+                log.info("{} start", Thread.currentThread().getName());
+                LockSupport.park();
+                log.info("{} end", Thread.currentThread().getName());
+            }
+        });
+
+        firstThread.start();
+        secondThread.start();
+
+        Sleep.sleep(2);
+
+        LockSupport.unpark(firstThread);
+    }
+}
+```
+
+## 3. 先unPark后park
+
+- unPark可以在park前调用，也可以在park后调用
+
+```java
+package com.erick.multithread.d01;
+
+import com.erick.multithread.Sleep;
+import lombok.extern.slf4j.Slf4j;
+
+import java.util.concurrent.locks.LockSupport;
+
+public class Demo01 {
+    public static void main(String[] args) {
+        ParkService service = new ParkService();
+        Thread firstThread = new Thread(() -> service.work());
+        /*后面的park就不会停下来了*/
+        firstThread.start(); // 先启动要测试的线程
+        /*先unPark*/
+        new Thread(() -> service.unParkJob(firstThread)).start();
+    }
+}
+
+@Slf4j
+class ParkService {
+    public synchronized void work() {
+        log.info("{} start to run", Thread.currentThread().getName());
+
+        Sleep.sleep(3);
+
+        log.info("{} ready to park", Thread.currentThread().getName());
+        LockSupport.park();
+        log.info("{} resume running", Thread.currentThread().getName());
+    }
+
+    public void unParkJob(Thread thread) {
+        log.info("{} unPark", Thread.currentThread().getName());
+        LockSupport.unpark(thread);
+    }
+}
+```
+
+## 4. park/wait
+
+|      | Park/Unpark                      | Wait/Notify                                   |
+| ---- | -------------------------------- | --------------------------------------------- |
+| 来源 | LockSupport的方法                | Object的方法                                  |
+| 粒度 | 是以线程为单位来阻塞和唤醒的     | notify只能随机唤醒一个, notifyAll唤醒所有线程 |
+| 顺序 | 可以先unPark                     | 不能先notify                                  |
+| 用法 | 不用一定要锁，Park时候不会释放锁 | 必须先获取到锁，wait时候释放锁                |
+
+## 5. Park原理
+
+- 多次park
+
+```java
+package com.erick.multithread.d01;
+
+import com.erick.multithread.Sleep;
+import lombok.extern.slf4j.Slf4j;
+
+import java.util.concurrent.locks.LockSupport;
+
+@Slf4j
+public class Demo02 {
+    public static void main(String[] args) {
+        Thread thread = new Thread(() -> {
+            log.info("first park----");
+            LockSupport.park();
+            log.info("first resume---");
+
+            log.info("second park----");
+            LockSupport.park();
+            log.info("second resume---");
+        });
+
+        thread.start();
+
+        Sleep.sleep(1);
+        log.info("first unPark");
+        LockSupport.unpark(thread);
+
+        Sleep.sleep(1);
+        log.info("second unPark");
+        LockSupport.unpark(thread);
+    }
+}
+```
+
 # 锁特性
 
 ## 1. 多锁
