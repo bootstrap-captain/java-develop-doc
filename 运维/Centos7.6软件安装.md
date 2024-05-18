@@ -219,6 +219,85 @@ bin/kafka-server-start.sh -daemon config/server.properties
 jps
 ```
 
+# MongoDB
+
+- MongoDB Community Server
+
+## 1. 单机版
+
+- [官方安装文档](https://www.mongodb.com/docs/manual/)
+
+![image-20240518110657599](https://erick-typora-image.oss-cn-shanghai.aliyuncs.com/img/image-20240518110657599.png)
+
+```bash
+# 上传
+put /Users/shuzhan/Desktop/mongodb-linux-x86_64-rhel70-7.0.9.tgz /opt
+
+# 解压
+tar -xvf mongodb-linux-x86_64-rhel70-7.0.9.tgz 
+
+# 目录结构
+-rw-r--r-- 1 root root  30608 Apr 24 23:50 LICENSE-Community.txt
+-rw-r--r-- 1 root root  16726 Apr 24 23:50 MPL-2
+-rw-r--r-- 1 root root   1978 Apr 24 23:50 README
+-rw-r--r-- 1 root root 122512 Apr 24 23:50 THIRD-PARTY-NOTICES
+drwxr-xr-x 2 root root   4096 May 18 11:10 bin
+
+
+# 移动解压后的文件夹到指定目录
+mv mongodb-linux-x86_64-rhel70-7.0.9 /usr/local/mongodb
+
+# 新建几个目录，用来存储日志和数据
+cd /usr/local/mongodb
+mkdir -p erick/data/db                # 存储数据
+mkdir -p erick/log                    # 存储日志
+```
+
+### 1.1 mongodb.conf 
+
+- [配置文件](https://www.mongodb.com/docs/manual/reference/configuration-options/)
+
+```
+systemLog:
+   destination: file                                  # 以文件的形式输出日志
+   path: "/usr/local/mongodb/erick/log/mongod.log"    # 具体的绝对路径
+   logAppend: true                                    # mongo重启时，日志附加到原文件末尾
+
+storage:
+   dbPath: "/usr/local/mongodb/erick/data/db"         # 存储数据的目录
+
+processManagement:
+   fork: true                                          # 后台启动
+
+net:
+   bindIp: 172.17.56.24                               # 局域网ip，非公网IP
+   port: 27017
+```
+
+### 1.2 启动
+
+```bash
+# 上传配置文件
+put /Users/shuzhan/Desktop/mongodb.conf /opt
+
+# 启动
+/usr/local/mongodb/bin/mongod -f /opt/mongodb.conf 
+
+- 如果启动失败，一般是配置文件出错，去对应的log里面查找即可
+
+# 查看
+ps -ef | grep mongod
+
+# 远程DataGrip连接
+- 连接的IP为公网IP
+```
+
+![image-20240518120043762](https://erick-typora-image.oss-cn-shanghai.aliyuncs.com/img/image-20240518120043762.png)
+
+
+
+
+
 # MYSQL
 
 ## 1. 单机版

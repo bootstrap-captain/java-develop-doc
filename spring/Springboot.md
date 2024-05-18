@@ -845,7 +845,7 @@ static class Registrar implements ImportBeanDefinitionRegistrar, DeterminableImp
 	}
 ```
 
-#### AutoConfigurationImportSelector
+#### @Import(AutoConfigurationPackages.Registrar.class)
 
 - 主要是实现了ImportSelector，来向容器中批量注册组件
 
