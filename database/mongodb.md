@@ -126,3 +126,49 @@ db.good.countDocuments();
 
 # 索引
 
+```bash
+# 查看当前索引： 默认_id是索引
+db.student.getIndexes();
+
+# name：索引的字段
+# v：版本号
+# key：具体的那个字段，1代表升序，-1代表降序
+[
+  {
+    "key": {
+      "_id": 1
+    },
+    "name": "_id_",
+    "v": 2
+  }
+]
+
+# 创建索引
+db.student.createIndex({name:1});              # 单个索引
+db.student.createIndex({name:1,hobby:-1});     # 多个索引
+
+# 删除索引
+db.student.dropIndex({name:1});    # 具体指定索引类型
+db.student.dropIndex('name_1');    # 根据索引名称
+db.student.dropIndexes();          # 删除所有自定义的index，不会删除_id
+
+```
+
+
+
+# Java
+
+- springdata
+
+```yaml
+spring:
+  data:
+    mongodb:
+      host: 39.105.210.163
+      port: 27017
+      database: erickdb
+      username: erickroot
+      password: '123456'               # 如果密码纯数字，则必须加''
+      authentication-database: admin   # 必须配置，不然就认证失败
+```
+

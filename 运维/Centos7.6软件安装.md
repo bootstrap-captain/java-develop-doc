@@ -229,6 +229,8 @@ jps
 
 ![image-20240518110657599](https://erick-typora-image.oss-cn-shanghai.aliyuncs.com/img/image-20240518110657599.png)
 
+### 1.1 上传文件
+
 ```bash
 # 上传
 put /Users/shuzhan/Desktop/mongodb-linux-x86_64-rhel70-7.0.9.tgz /opt
@@ -253,11 +255,11 @@ mkdir -p erick/data/db                # 存储数据
 mkdir -p erick/log                    # 存储日志
 ```
 
-### 1.1 mongodb.conf 
+### 1.2 mongodb.conf 
 
 - [配置文件](https://www.mongodb.com/docs/manual/reference/configuration-options/)
 
-```
+```conf
 systemLog:
    destination: file                                  # 以文件的形式输出日志
    path: "/usr/local/mongodb/erick/log/mongod.log"    # 具体的绝对路径
@@ -274,7 +276,7 @@ net:
    port: 27017
 ```
 
-### 1.2 启动
+### 1.3 启动
 
 ```bash
 # 上传配置文件
@@ -294,9 +296,86 @@ ps -ef | grep mongod
 
 ![image-20240518120043762](https://erick-typora-image.oss-cn-shanghai.aliyuncs.com/img/image-20240518120043762.png)
 
+## 2. 安全认证
 
+- 默认的mongodb启动后，是不需要安全认证的
+- mongodb提供了基于用户的权限认证
 
+```bash
+use admin;                 #  切换到admin
+show collections;          #  包含 system.version 的这个collection
+db.system.version.find();   
 
+# 结果
+[
+  {
+    "_id": "featureCompatibilityVersion",
+    "version": "7.0"
+  }
+]
+```
+
+### 2.1 管理员用户
+
+```bash
+# root: 超级权限
+db.createUser({user:"erickroot", pwd:"123456", roles:[{"role":"root", "db":"admin"}]});
+show collections;           # 在admin库创建了一个system.users的collection
+db.system.users.find();
+
+# userAdminAnyDatabase: 在指定数据库创建和修改用户(除了config和local库存)
+db.createUser({user:"erickadmin", pwd:"123456", roles:[{"role":"userAdminAnyDatabase","db":"admin"}]});
+show collections;           # 在admin库的system.users添加用户
+db.system.users.find();
+
+# 删除用户
+db.dropUser("erickadmin");
+
+# 修改密码
+db.changeUserPassword("erickadmin","123456");
+```
+
+### 2.2 关闭服务端
+
+```bash
+ps -ef |grep mongo         # 查看端口
+
+kill -9 1741               # 杀死进程
+
+# 在配置文件中：开启认证
+```
+
+### 2.3 修改配置文件
+
+```bash
+systemLog:
+   destination: file                                  # 以文件的形式输出日志
+   path: "/usr/local/mongodb/erick/log/mongod.log"    # 具体的绝对路径
+   logAppend: true                                    # mongo重启时，日志附加到原文件末尾
+
+storage:
+   dbPath: "/usr/local/mongodb/erick/data/db"         # 存储数据的目录
+
+processManagement:
+   fork: true                                          # 后台启动
+
+net:
+   bindIp: 172.17.56.24                               # 局域网ip，非公网IP
+   port: 27017
+
+security:
+  authorization: enabled                             # 开启权限认证
+```
+
+### 2.4 重启服务端
+
+```bash
+# 上传配置文件
+put /Users/shuzhan/Desktop/mongodb.conf /opt
+
+# 启动
+/usr/local/mongodb/bin/mongod -f /opt/mongodb.conf 
+```
 
 # MYSQL
 
