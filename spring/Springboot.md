@@ -285,8 +285,6 @@ public class DatasourceConfig {
 }
 ```
 
-
-
 ### 1.3 ConditionalOnProperty
 
 - 根据配置文件做开关，选择性加载某些bean
@@ -681,8 +679,6 @@ public  class QueueConfig {
 }
 ```
 
-
-
 ## 4. YAML语法
 
 - yaml, yml 都可以支持
@@ -726,8 +722,6 @@ student:
 ```
 
 # 自动装配
-
-
 
 ## 1. 基本介绍
 

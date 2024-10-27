@@ -588,10 +588,6 @@ under the License.
 - 如果父工程和子工程都定义了一个pom类型的父工程，则选用子项目的版本
 - 父工程可以不断向上追溯
 
-```bash
-
-```
-
 ![image-20221030163207215](https://erick-typora-image.oss-cn-shanghai.aliyuncs.com/img/image-20221030163207215.png)
 
 ## 3. 项目抽离

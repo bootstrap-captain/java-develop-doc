@@ -258,8 +258,6 @@ LINSERT key BEFORE/AFTER pivot value  # 在pivot元素前或后插入一个值
 - 无序，不重复，查找快
 - 支持交集，并集，差集等
 
-### 3.1 基本指令
-
 ```bash
 # 1. 增加         
 SADD key element1 element2 element3
@@ -285,20 +283,9 @@ SDIFF key1 key2 key3     # 差集
 SUNION key1 key2 key3    # 并集  
 ```
 
-### 3.2 应用场景
-
-- 随机推荐
-
-```bash
-- 比如感兴趣的话题： 从话题的set中随机弹出几个，并将该话题推荐给客户
-- 如果客户感兴趣，则后续继续推荐
-```
-
 ## 4. Hash
 
 - value为Map
-
-### 4.1 基本指令
 
 ```bash
 # 1. 添加获取 以H开头
@@ -321,23 +308,6 @@ HINCRBY key field numbers
 
 # 5 . add if not exist: 返回添加的field的个数
 HSETNX key field value
-```
-
-### 4.2 应用场景
-
-```bash
-# 1. Bean对象
-可以用来装Bean对象,不要滥用
-
-# 2. 购物车
-- 用户id作为key
-- 商品编号作为field，商品数量作为value
-- 多个商品
-
-# 3. 促销活动： 不同商家（三大运行商），推出 30，50， 100的充值卡抢购， 每个卡都是1000最多
-- 商家id作为key
-- 不同充值卡编号作为field
-- 充值卡对应的数量作为value
 ```
 
 ## 5. SortedSet

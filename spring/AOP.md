@@ -211,7 +211,7 @@ public class MyAdvice {
 | 代理技术 | 使用条件                                                     | 配置方式                                                     |
 | -------- | ------------------------------------------------------------ | ------------------------------------------------------------ |
 | JDK      | 目标对象有接口，基于接口                                     | 目标类有接口时，默认方式                                     |
-| Glib     | 目标对象无接口，且不能使用final修饰，基于被代理对象动态生成子类作为代理对象 | 目标类无接口时，默认方式<br>有接口时，可手动配置<aop:config proxy-target-class="true">强制使用cglib |
+| Cglib    | 目标对象无接口，且不能使用final修饰，基于被代理对象动态生成子类作为代理对象 | 目标类无接口时，默认方式<br>有接口时，可手动配置<aop:config proxy-target-class="true">强制使用cglib |
 
 ![image-20231222155223254](https://erick-typora-image.oss-cn-shanghai.aliyuncs.com/img/image-20231222155223254.png)
 

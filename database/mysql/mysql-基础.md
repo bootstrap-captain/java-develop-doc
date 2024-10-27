@@ -18,7 +18,6 @@
 
 # 非RDBMS
 - 可以看成RDBMS的精简版，基于k-v存储数据，不需要经过SQL层的解析，性能高
-- 不能通过类似mysql的where来进行过滤
 - k-v类型数据库:  Redis
 - 文档类型数据库:  mongodb, aws dynomoDB, 存储xml或json
 - 图形类型数据库: 
@@ -215,7 +214,6 @@ ADD season SET ('春', '夏', '秋', '冬') null;
 # 字符串类型
 - 如果为定长，则使用char
 - 如果为可变，则用varchar，长度不要超过5000，否则就使用text，并独立出一张表，用主键来对应
-
 ```
 
 # 库表操作
