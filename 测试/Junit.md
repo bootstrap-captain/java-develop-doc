@@ -118,6 +118,8 @@ public class AwsServiceTest {
 
 ## 5. 案例精进
 
+- 各个类的运行顺序是什么样子的？
+
 ### 5.1 BeforeAll vs BeforeEach
 
 - BeforeAll: 作用在静态方法上，初始化一些整个类都会使用到的资源，且各个方法对该资源使用不会冲突
@@ -132,10 +134,6 @@ public class BrandService {
 
     public String getName(String name){
         return name.toUpperCase();
-    }
-
-    public String getInfo(String name){
-        return name.toLowerCase();
     }
 }
 ```
@@ -169,13 +167,6 @@ public class BrandServiceTest {
         String name = "erick";
         String result = service.getName(name);
         Assertions.assertEquals(result,"ERICK");
-    }
-
-    @Test
-    public void getInfoTest(){
-        String info = "BEIJING";
-        String result = service.getInfo(info);
-        Assertions.assertEquals(result,"beijing");
     }
 }
 ```
@@ -373,223 +364,83 @@ public class MessageServiceTest {
 
 ## 1. 零值处理
 
-- 被Mock的对象，执行方法时候，不会走实际的调用，默认返回结果为该方法返回值的'空值'
+- 被Mock的对象，执行方法时，不会走实际的调用，默认返回结果为该方法返回值的'空值'
+- 依赖的服务，可以通过setter注入或者constructor注入
 
-### setter注入
-
-#### SRC
+### SRC
 
 ```java
-package com.erick.demo06;
+package com.erick.demo01;
 
-public class AService {
-
-    private BService bService;
-
-    public void setbService(BService bService) {
-        this.bService = bService;
-    }
-
-    public String getInfo() {
-        // 调用B类,空值就是null
-        String bServiceName = bService.getBServiceName();
-        return "A-Service" + bServiceName;
+public class SqsService {
+    public String getSqsTopic(String productName) {
+        return "nike" + productName;
     }
 }
 ```
 
 ```java
-package com.erick.demo06;
+package com.erick.demo01;
 
-public class BService {
-    public String getBServiceName() {
-        System.out.println("B-service");
-        return "BService"; 
+public class AwsService {
+    private SqsService sqsService;
+
+    public void setSqsService(SqsService sqsService) {
+        this.sqsService = sqsService;
+    }
+
+    public String awsGetTopicName() {
+        String appleTopic = sqsService.getSqsTopic("apple");
+        String huaweiTopic = sqsService.getSqsTopic("huawei");
+        return (appleTopic + huaweiTopic).toUpperCase();
     }
 }
 ```
 
-#### UT
+### UT
 
 ```java
-package com.erick.demo06;
+package com.erick.demo01;
 
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mock;
+import org.mockito.MockedConstruction;
+import org.mockito.Mockito;
 import org.mockito.MockitoAnnotations;
 
-public class AServiceTest {
+public class AwsServiceTest {
 
-    private AService aService;
-
+    private AwsService awsService;
+ 
+   // Mockito会对该类实例化
     @Mock
-    private BService bService;
-
+    private SqsService sqsService;
 
     @BeforeEach
     public void init() {
-        // 代表本类开启了Mockito功能
-        MockitoAnnotations.openMocks(this);
-        aService = new AService();
-        aService.setbService(bService); // 依赖注入
+        MockitoAnnotations.openMocks(this);// 代表本类开启了Mockito功能
+        awsService = new AwsService();
+        awsService.setSqsService(sqsService);
     }
 
     @Test
-    public void getInfoTest() {
-        String info = aService.getInfo();
-        Assertions.assertEquals(info, "A-Servicenull");
-    }
-}
-```
+    public void awsConnectTest(){
+        String result = awsService.awsGetTopicName();
+        /*1. 验证一：验证结果*/
+        Assertions.assertEquals(result,"NULLNULL");
+        /*2. 验证二：验证调用了两次*/
+        Mockito.verify(sqsService,Mockito.times(2)).getSqsTopic(Mockito.anyString());
 
-### constructor注入
-
-#### SRC
-
-```java
-package com.erick.demo07;
-
-public class AService {
-
-    private final BService bService;
-
-    public AService(BService bService) {
-        this.bService = bService;
-    }
-
-    public int getAge() {
-        // 调用B类,空值就是0
-        int age = bService.getAccount();
-        return age;
-    }
-}
-```
-
-```java
-package com.erick.demo07;
-
-public class BService {
-    public int getAccount() {
-        System.out.println("B-service");
-        return 10;
-    }
-}
-```
-
-#### UT
-
-```java
-package com.erick.demo07;
-
-import org.junit.jupiter.api.Assertions;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Test;
-import org.mockito.Mock;
-import org.mockito.MockitoAnnotations;
-
-public class AServiceTest {
-
-    private AService aService;
-
-    @Mock
-    private BService bService;
-
-
-    @BeforeEach
-    public void init() {
-        // 代表本类开启了Mockito功能
-        MockitoAnnotations.openMocks(this);
-        aService = new AService(bService); // constructor注入
-    }
-
-    @Test
-    public void getInfoTest() {
-        int age = aService.getAge();
-        Assertions.assertEquals(age, 0);
-    }
-}
-```
-
-### new注入
-
-- A类中调用B，但是BService是在方法里面创建的，这种就没办法测
-- 因此，一般第三方的Service，尽可能<font color=orange>成员变量</font>，或者通过<font color=orange>方法参数</font>传递进来
-
-#### SRC
-
-```java
-package com.erick.demo08;
-
-public class PhoneService {
-
-    public long process(OuterApi api) {
-        System.out.println("coming");
-        OuterApi api = new OuterApi();
-        long costTime = api.callApi();
-        System.out.println("ending");
-        return costTime;
-    }
-}
-```
-
-```java
-package com.erick.demo08;
-
-import java.util.concurrent.TimeUnit;
-
-public class OuterApi {
-
-    public long callApi() {
-        long start = System.currentTimeMillis();
-        try {
-            TimeUnit.SECONDS.sleep(1);
-        } catch (InterruptedException e) {
-            throw new RuntimeException(e);
-        }
-        return System.currentTimeMillis() - start;
-    }
-}
-```
-
-#### UT
-
-```java
-package com.erick.demo08;
-
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Test;
-import org.mockito.Mock;
-import org.mockito.MockitoAnnotations;
-
-public class PhoneServiceTest {
-
-    private PhoneService phoneService;
-
-    @Mock
-    private OuterApi outerApi;
-
-    @BeforeEach
-    public void init() {
-        phoneService = new PhoneService();
-        MockitoAnnotations.openMocks(this);
-        //outerApi根本没有和phoneService发生关系
-    }
-
-    @Test
-    public void process() {
-        long process = phoneService.process();
     }
 }
 ```
 
 ## 2. 打桩处理
 
-- 被Mock的对象，执行方法时候，不会走实际的调用，可以给指定返回值
+- 被Mock的对象，执行方法时，不会走实际的调用，可以给指定返回值
 - 比如调用的B类中获得json，后面还要处理该json
-- 同样支持上面两种注入方式
-- Mockito.when(bService.getNumber()).thenReturn(3);
 
 ### SRC
 
@@ -722,13 +573,9 @@ public class AServiceTest {
 }
 ```
 
-# Mockito-静态方法
+# Mockito-Inline
 
-- 场景：A类方法-->B类方法，如果B类方法是静态的，那就玩不转了
-- mockito core 3.4以上，支持对静态方法的测试
-- 如果一个方法里面调用了静态方法，可以对静态方法进行mock结果，验证可以通过正常断言或者静态方法被调用次数
-- 但是打桩的类，就不是代理类了，但是功能还是正常的
-- mock的对应的对象，是全局的。结束后对该静态方法的类关闭，否则可能影响到其他使用该类
+- 支持静态方法Mock，构造器Mock
 
 ```xml
 <!--mockito-inline: 支持静态方法的mock-->
@@ -740,11 +587,79 @@ public class AServiceTest {
 </dependency>
 ```
 
-## 无参-无返回值
+## MockedConstruction
+
+- 如果一个类的方法中，new出来其他类的对象，需要对这一类进行打桩时
+
+### SRC
+
+```java
+package com.erick.demo01;
+
+public class SqsService {
+    public String getSqsTopic() {
+        return "nike-mall";
+    }
+}
+```
+
+```java
+package com.erick.demo01;
+
+public class AwsService {
+    public String getInfo() {
+        SqsService sqsService = new SqsService();
+        String sqsTopic = sqsService.getSqsTopic();
+        return sqsTopic + "erick";
+    }
+}
+```
+
+### UT
+
+```java
+package com.erick.demo01;
+
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.mockito.MockedConstruction;
+import org.mockito.Mockito;
+
+public class AwsServiceTest {
+
+    private AwsService awsService;
+
+    @BeforeEach
+    public void init() {
+        awsService = new AwsService();
+    }
+
+    @Test
+    public void testGetInfo() {
+        try (MockedConstruction<SqsService> sqsService
+                     = Mockito.mockConstruction(SqsService.class,((mock, context) -> {
+                      //  mock模拟的值
+                      Mockito.when(mock.getSqsTopic()).thenReturn("haha");
+        }))){
+            String info = awsService.getInfo();
+            Assertions.assertEquals("hahaerick",info);
+        }
+    }
+}
+```
+
+## MockedStatic
+
+- 场景：A类方法-->B类方法，如果B类方法是静态的
+- 如果一个方法里面调用了静态方法，可以对静态方法进行mock结果，验证可以通过正常断言或者静态方法被调用次数
+- mock的对应的对象，是全局的。结束后对该静态方法的类关闭，否则可能影响到其他使用该类
+
+### 无参-无返回值
 
 - 验证调用次数
 
-### SRC
+#### SRC
 
 ```java
 public class ErickUtil {
@@ -763,7 +678,7 @@ public class CarService {
 }
 ```
 
-### UT
+#### UT
 
 ```java
 public class CarServiceTest {
@@ -786,9 +701,9 @@ public class CarServiceTest {
 }
 ```
 
-## 无参-有返回值
+### 无参-有返回值
 
-### SRC
+#### SRC
 
 ```java
 public class ErickUtil {
@@ -807,7 +722,7 @@ public class CarService {
 }
 ```
 
-### UT
+#### UT
 
 ```java
 
@@ -830,9 +745,9 @@ public class CarServiceTest {
 }
 ```
 
-## 有参-无返回值
+### 有参-无返回值
 
-### SRC
+#### SRC
 
 ```java
 public class ErickUtil {
@@ -853,7 +768,7 @@ public class CarService {
 }
 ```
 
-### UT
+#### UT
 
 ```java
 public class CarServiceTest {
@@ -876,9 +791,9 @@ public class CarServiceTest {
 }
 ```
 
-## 有参-有返回值
+### 有参-有返回值
 
-### SRC
+#### SRC
 
 ```java
 public class ErickUtil {
@@ -896,7 +811,7 @@ public class CarService {
 }
 ```
 
-### UT
+#### UT
 
 ```java
 public class CarServiceTest {
@@ -922,24 +837,6 @@ public class CarServiceTest {
 }
 ```
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 # Mockito-@Spy
 
 ```bash
@@ -958,39 +855,23 @@ public class CarServiceTest {
 # 这种打桩方法，如果本类中被打桩的方法是私有方法，则无法实现， 可以改为protected来实现
 ```
 
-## 1. @Spy
+## 1. 零值处理
 
-
-
-# Mockito -verify
-
-## 1. 调用次数
-
-- A-Service调用B-Service的方法，假如B-Service没有返回值，则不确定是否被调用
+- 默认会走真实的方法调用
 
 ### SRC
 
 ```java
-public class PhoneService {
+package com.erick.demo01;
 
-    public void work(String brand, String type) {
-        System.out.println(brand);
-        System.out.println(type);
+public class MessageProcessor {
+    public void processMessage() {
+        send();
     }
-}
-```
 
-```java
-public class PhoneController {
-    @Setter
-    private PhoneService phoneService;
-
-
-    public void callService() {
-        String type = "iphone";
-        String brand = "apple";
-        phoneService.work(type, brand);
-        phoneService.work(type, brand);
+    /*如果方法是protected，则好处理*/
+    protected void send() {
+        System.out.println("sending");
     }
 }
 ```
@@ -998,28 +879,77 @@ public class PhoneController {
 ### UT
 
 ```java
-public class PhoneControllerTest {
+package com.erick.demo01;
 
-    private PhoneController controller = new PhoneController();
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.mockito.Mockito;
 
-    @Mock
-    private PhoneService phoneService;
+public class MessageProcessorTest {
+    private MessageProcessor messageProcessor;
 
     @BeforeEach
-    void init() {
-        MockitoAnnotations.openMocks(this);
-        controller.setPhoneService(phoneService);
+    public void init() {
+        messageProcessor = Mockito.spy(MessageProcessor.class);
     }
 
     @Test
-    void callServiceTest() {
-        controller.callService();
-        Mockito.verify(phoneService, Mockito.times(2)).work(Mockito.any(), Mockito.any());
+    public void processMessageTest() {
+        messageProcessor.processMessage();
     }
 }
 ```
 
+## 2. 打桩
 
+### SRC
+
+```java
+package com.erick.demo01;
+
+public class MessageProcessor {
+    public void processMessage() {
+        send();
+    }
+
+    /*如果方法是protected，则好处理*/
+    protected void send() {
+        System.out.println("sending");
+    }
+}
+```
+
+### UT
+
+```java
+package com.erick.demo01;
+
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.mockito.Mockito;
+
+public class MessageProcessorTest {
+    private MessageProcessor messageProcessor;
+
+    @BeforeEach
+    public void init() {
+        messageProcessor = Mockito.spy(MessageProcessor.class);
+    }
+
+    @Test
+    public void processMessageTest() {
+        /*打桩，不会去执行对应的方法*/
+        Mockito.doNothing().when(messageProcessor).send();
+        messageProcessor.processMessage();
+    }
+
+    /*覆盖到protected方法*/
+    @Test
+    public void sendTest() {
+        messageProcessor.send();
+    }
+}
+```
 
 # SpringBoot-Mockito
 
@@ -1031,128 +961,71 @@ public class PhoneControllerTest {
 ```
 
 ```xml
-<dependencies>
-<?xml version="1.0" encoding="UTF-8"?>
-<project xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-         xmlns="http://maven.apache.org/POM/4.0.0"
-         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
-    <modelVersion>4.0.0</modelVersion>
+<!-- spring-boot-starter： 继承了junit5， mockito -->
+<dependency>
+    <groupId>org.springframework.boot</groupId>
+    <artifactId>spring-boot-starter-test</artifactId>
+    <version>2.7.3</version>
+    <scope>test</scope>
+</dependency>
 
-    <groupId>com.erick</groupId>
-    <artifactId>springboot-mockito</artifactId>
-    <version>1.0-SNAPSHOT</version>
-    <properties>
-        <maven.compiler.source>17</maven.compiler.source>
-        <maven.compiler.target>17</maven.compiler.target>
-    </properties>
-
-    <dependencies>
-
-        <dependency>
-            <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-starter</artifactId>
-            <version>2.7.3</version>
-        </dependency>
-
-        <!-- spring-boot-starter： 继承了junit5， mockito -->
-        <dependency>
-            <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-starter-test</artifactId>
-            <version>2.7.3</version>
-            <scope>test</scope>
-        </dependency>
-
-        <!--支持静态方法-->
-        <dependency>
-            <groupId>org.mockito</groupId>
-            <artifactId>mockito-inline</artifactId>
-            <version>4.7.0</version>
-            <scope>test</scope>
-        </dependency>
-
-        <dependency>
-            <groupId>org.projectlombok</groupId>
-            <artifactId>lombok</artifactId>
-            <version>1.18.24</version>
-        </dependency>
-    </dependencies>
-
-</project>
+<!--支持静态方法-->
+<dependency>
+    <groupId>org.mockito</groupId>
+    <artifactId>mockito-inline</artifactId>
+    <version>4.7.0</version>
+    <scope>test</scope>
+</dependency>
 ```
 
-## 1. 入门案例
+## 入门案例
 
-```bash
-# 方式一： 不启动主启动类的测试
-# 激活Mockito的注解
-# org.junit.jupiter.api.extension.ExtendWith;
-@ExtendWith(SpringExtension.class)  
-
-# 将该类的对应的Spring的bean放在容器中
-# org.springframework.test.context.ContextConfiguration;
-@ContextConfiguration(classes = AwsService.class) 
-
-# 将被测试类注入到测试中
-@Autowired
-
-# 将被测试类的依赖类，通过DI注入到测试类中
-# org.springframework.boot.test.mock.mockito.MockBean;
- @MockBean
- 
- 
- # 方式二： 直接在被测试类上加， 这样就会加载主启动类，同时完成测试
- # 使用spring容器功能， 检验项目是否能够启动， 时间稍微长
- @SpringBootTest
-```
-
-
+### SRC
 
 ```java
-package com.erick.service;
+package com.erick.replay.service;
 
-import com.erick.constant.ErickConstant;
 import org.springframework.stereotype.Service;
-
-import java.util.HashMap;
-import java.util.Map;
-
-@Service
-public class SnsService {
-
-    public Map<String, Object> getSnsTopic(String topicName) {
-        Map<String, Object> info = new HashMap<>();
-        info.put(ErickConstant.TOPIC_NAME, topicName);
-        info.put(ErickConstant.TOPIC_REGION, "us-east-1");
-        return info;
-    }
-}
-```
-
-```java
-package com.erick.service;
-
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.stereotype.Service;
-
-import java.util.Map;
 
 @Service
 public class AwsService {
-
-    @Autowired
-    private SnsService snsService;
-
-    public Map<String, Object> getSnsInfo(String topicName) {
-        int a = 2;
-        int b = 3;
-        return snsService.getSnsTopic(topicName);
+    public String getInfo(String name) {
+        return name.toUpperCase();
     }
 }
 ```
 
 ```java
-package com.erick.service;
+package com.erick.replay.controller;
 
+import com.erick.replay.service.AwsService;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
+
+@RestController
+@RequestMapping("/erick")
+public class ErickController {
+
+    @Autowired
+    private AwsService awsService;
+
+    @GetMapping("/getResult")
+    public String getResult(String region){
+        return awsService.getInfo(region);
+    }
+}
+```
+
+### UT - 方式一
+
+- 不启动主启动类的测试
+
+```java
+package com.erick.replay.controller;
+
+import com.erick.replay.service.AwsService;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -1162,26 +1035,62 @@ import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.test.context.ContextConfiguration;
 import org.springframework.test.context.junit.jupiter.SpringExtension;
 
-import java.util.HashMap;
-import java.util.Map;
+/*激活Mockito的注解*/
+@ExtendWith(SpringExtension.class)
 
-@ExtendWith(SpringExtension.class)  // 开启spring容器功能
-@ContextConfiguration(classes = AwsService.class) // 将该类的对应的Spring的bean放在容器中
-public class AwsServiceTest {
+/*该类的对应的Spring的bean放在容器中*/
+@ContextConfiguration(classes = {ErickController.class})
+public class ErickControllerServiceTest {
 
+    /*被测试类:上面放在容器中了，所以这里可以使用@Autowired进行注入*/
     @Autowired
-    private AwsService awsService;
+    private ErickController erickController;
 
-    /*mock的B类的依赖，同时注入到上面的测试类中*/
+    /*依赖的类*/
     @MockBean
-    private SnsService snsService;
+    private AwsService awsService;
+    /*上面几个步骤，会自动处理好对应的DI关系*/
 
     @Test
-    public void testGetSnsInfo() {
-        Mockito.when(snsService.getSnsTopic(Mockito.any())).thenReturn(new HashMap<>());
-        Map<String, Object> snsInfo = awsService.getSnsInfo("mock");
-        Assertions.assertEquals(0, snsInfo.size());
+    public void getResultTest() {
+        Mockito.when(awsService.getInfo(Mockito.anyString())).thenReturn("haha");
+        String result = erickController.getResult("beijing");
+        Assertions.assertEquals("haha", result);
     }
 }
 ```
 
+### UT - 方式二
+
+```java
+package com.erick.replay.controller;
+
+import com.erick.replay.service.AwsService;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
+import org.mockito.Mockito;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.test.mock.mockito.MockBean;
+
+/**
+ * 直接在被测试类上加， 这样就会加载主启动类，同时完成测试
+ * 使用spring容器功能， 检验项目是否能够启动， 时间稍微长
+ */
+@SpringBootTest
+public class ErickControllerServiceTest {
+
+    @Autowired
+    private ErickController erickController;
+
+    @MockBean
+    private AwsService awsService;
+
+    @Test
+    public void getResultTest() {
+        Mockito.when(awsService.getInfo(Mockito.anyString())).thenReturn("haha");
+        String result = erickController.getResult("beijing");
+        Assertions.assertEquals("haha", result);
+    }
+}
+```
