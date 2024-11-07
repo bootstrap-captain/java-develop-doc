@@ -132,4 +132,4 @@ git@github.com:bootstrap-captain/java-develop-doc.git
 
 #  分支管理
 
-![image-20241107141104162](https://erick-typora-image.oss-cn-shanghai.aliyuncs.com/img/image-20241107141104162.png)
+![image-20241107143557979](https://erick-typora-image.oss-cn-shanghai.aliyuncs.com/img/image-20241107143557979.png)
