@@ -284,9 +284,13 @@ public class Demo05 {
 
 ### 4. map
 
+- 拿到数据后，对其中的数据做定制化处理
+
 ```java
 package d01;
 
+import lombok.AllArgsConstructor;
+import lombok.Data;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -295,7 +299,7 @@ import java.util.Collections;
 import java.util.List;
 import java.util.stream.Stream;
 
-public class Demo05 {
+public class Demo06 {
     private List<String> raw = new ArrayList<>();
 
 
@@ -305,17 +309,36 @@ public class Demo05 {
     }
 
 
+    /*单纯处理数据*/
     @Test
     public void test01() {
-        raw.stream()
-                .map(element -> {
-                    String[] split = element.split("-");
-                    return Integer.parseInt(split[1]);
-                })
-                .forEach(element -> System.out.println(element));
+        List<Integer> res = raw.stream().map(element -> {
+            String[] split = element.split("-");
+            return Integer.parseInt(split[1]);
+        }).toList();
+        System.out.println(res);
+    }
+
+    /*可以讲数据处理成对应的对象*/
+    @Test
+    public void test02() {
+        List<Person> list = raw.stream().map(element -> {
+            String[] split = element.split("-");
+            return new Person(split[0], Integer.parseInt(split[1]));
+        }).toList();
+        System.out.println(list);
     }
 }
+
+@Data
+@AllArgsConstructor
+class Person {
+    private String name;
+    private int age;
+}
 ```
+
+
 
 ## 终结方法
 
@@ -458,3 +481,8 @@ public class Demo05 {
 }
 ```
 
+## DEBUG
+
+![image-20241108153803148](https://erick-typora-image.oss-cn-shanghai.aliyuncs.com/img/image-20241108153803148.png)
+
+![image-20241108153859347](https://erick-typora-image.oss-cn-shanghai.aliyuncs.com/img/image-20241108153859347.png)
