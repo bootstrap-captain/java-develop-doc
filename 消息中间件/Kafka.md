@@ -24,8 +24,6 @@
 
 ## 2. Kafka架构
 
-### 2.1 Kafka Cluster + Zookeeper
-
 ```bash
 # 高并发
 - 一个topic的消息，根据分区策略，存储在不同server上对应的不同partition
@@ -40,41 +38,54 @@
 ![image-20240322113304756](https://erick-typora-image.oss-cn-shanghai.aliyuncs.com/img/image-20240322113304756.png)
 
 ```bash
-# 1. leader-follower机制
-- producer和consumer: 只和消息的所在的leader节点通信
-- leader获取数据后，会同步到follower节点
-- leader挂掉后，follower有条件会成为新的leader
-
-# 2. consumer group
-- 消费组：同一个消费组内，不同的消费端去连接不同的partition，增大消费能力
-- 同一个消费组内，不同的消费端不能连接同一个partition，否则就重复消费(kafka在分组方面就杜绝了这个)
-- 同一个消费组内，一个消费端可以去消费不同partition
-
-# 3. zookeeper
+# zookeeper
 - 记录server节点状态
 - 记录leader-follower相关信息
 - kafka-2.8.0前，必须配合zk使用， 2.8.0后，去zk化
 ```
 
-## 3. Java客户端
+## 3. 副本
 
-```xml
-<dependency>
-    <groupId>org.apache.kafka</groupId>
-    <artifactId>kafka-clients</artifactId>
-    <version>3.9.0</version>
-</dependency>
+- 防止单节点故障，提高数据可靠性
+- 副本数量：leader+follower数
+
+```bash
+# 1. leader-follower机制
+- producer和consumer: 只和msg所在的leader节点通信
+- leader获取数据后，会同步到follower节点
+- leader挂掉后，follower有条件会成为新的leader
+
+# 2. 副本数量
+- 太多副本： 进一步提高数据可靠性。 但会增加磁盘存储空间，增加网络数据传输，降低效率
+- 标准数 = Kafka集群的server数量-1
+
+# 3. 副本信息  AR = ISR + OSR
+   # AR (Assigned Replicas) 
+   - 分区中所有的副本， 包含leader和follower
+   
+   # ISR(In-sync Replcaition Set)
+   - 和leader保持同步的follwer集合，包括leader + follower
+   - 如果某follower长时间未向leader发送通信请求或同步数据，该follower就会被踢出ISR
+   - replica.lag.time.max.ms:30000     默认30s
+        
+   # OSR
+   - follower和leader同步时，延迟过大的副本集合
 ```
+
+- 副本数量为3的数据架构
+
+![image-20240323103027573](https://erick-typora-image.oss-cn-shanghai.aliyuncs.com/img/image-20240323103027573.png)
 
 # Producer
 
 - APP客户端，调用Kafka的API，向Kafka Cluster端发送数据
 
-![image-20220906165828046](https://erick-typora-image.oss-cn-shanghai.aliyuncs.com/img/image-20220906165828046.png)
+![image-20241109233210093](https://erick-typora-image.oss-cn-shanghai.aliyuncs.com/img/image-20241109233210093.png)
 
 ## 1. Interceptors
 
 - 拦截器：拦截消息，进行一些过滤，可以自定义，一般不使用
+- 假如外部应用中数据作为数据源，导入时候可以通过拦截器进行过滤
 
 ## 2. Serializer
 
@@ -84,13 +95,12 @@
 
 ```bash
 # key, value
+- key： msg的一个名字，  value：msg的具体的内容
 - key和value可以为任意类型的数据
 - key可以不存在，value必须存在
 ```
 
 ![image-20240322121859157](https://erick-typora-image.oss-cn-shanghai.aliyuncs.com/img/image-20240322121859157.png)
-
-![序列化](https://erick-typora-image.oss-cn-shanghai.aliyuncs.com/img/%E5%BA%8F%E5%88%97%E5%8C%96.png)
 
 ## 3.  Partitioner
 
@@ -98,44 +108,49 @@
 
 ![image-20240322123515926](https://erick-typora-image.oss-cn-shanghai.aliyuncs.com/img/image-20240322123515926.png)
 
-### 3.1 分区优点
+```bash
+# 分区优点
 
-#### 数据均衡
+# 数据均衡
+- 数据可以存放在集群不同的broker上
+- 假如每个broker内存配置相同，可以达到负载均衡效果
+- 假如每个broker内存配置不同，可以实现指定负载
 
-- 一个topic的所有数据通过分区规则，分别存在在不同的server上对应的partition
-- 合理控制分区规则，可以达到数据均衡分布
+# 指定划分
+- 可以自定义分区，从而使不同类型的数据，存放在不同的partion上
+   - 比如根据key，不同数据库的数据，用表名做为key，存放在不同分区
+   - 过滤脏数据
 
-#### 高并发
+# 高并发
+- producer：和单个broker通信 vs 和多个broker通信，效率提升
+- consumer：可以以分区为单位消费数据
+```
 
--  producer: 可以以分区为单位发送数据
-- consumer: 可以以分区为单位消费数据
-
-### 3.2 分区策略
+### 分区策略
 
 - 分区数：0，1，2等， 根据broker节点向zookeeper注册时间和数目来判断
-- 假如存在三个broker，那么有效分区就是0，1，2
+- 假如存在三个broker，kafaka会自动生成有效分区：0，1，2
 
 ```bash
 # DefaultPartitioner： 默认分区策略
-- 指定分区：    如果指定分区，则使用
-- 按照key：    如果不指定分区，但是存在key，则用key的hash对分区数取模 （比如key的hash为5，分区数量为3，则就存在2号分区内）
+- 指定分区：  指定分区，则使用
+- 按照key：  不指定分区，但存在key，则用key的hash对分区数取模 （比如key的hash为5，分区数量为3，则就存在2号分区内）
 - Stick Partition： 若不指定分区，不存在key，则使用
                       1.随机选择一个分区，并尽可能一直使用该分区
                       2.等到该分区的batch已满(batch.size)或已经完成(linger.ms)，则再随机选一个分区(和上一次分区不同)
 
 # 2. 自定义分区器： 
-#    2.1. 实现对应的package org.apache.kafka.clients.producer.Partitioner接口
+#    2.1. 实现 package org.apache.kafka.clients.producer.Partitioner 接口
 #    2.2. 重写partition()方法
 #    2.3  写入Producer的config中
-- 比如根据key，不同数据库的数据，用表名做为key，存放在不同分区
-- 过滤脏数据
 ```
 
 ## 4. RecordAccumulator
 
-- 缓存队列 ：producer产生的已经分区好的数据，先在本地的Queue中进行缓存，后续发往对应分区
-- 假如对应partition较多 扩大缓冲区
-- 默认大小：32M
+- 缓存队列 : 通过分区器生成好的数据，先在JVM本地的DQueue中进行缓存，后续发往对应分区
+- 对应的Topic，有几个分区，就会有几个DQueue
+
+![image-20241109233508661](https://erick-typora-image.oss-cn-shanghai.aliyuncs.com/img/image-20241109233508661.png)
 
 ```bash
 # 两个条件只要达到，就会被后面的sender-thread，从缓冲区中拉取发送到kafka cluster
@@ -147,11 +162,30 @@
           - 如果数据迟迟没有达到batch size， 等到linger.ms时间后，sender也会将数据当作一个批次，进行拉取
           - 单位为ms，默认0ms，即无延迟发送，但效率较低   
           
-
 # memory pool
 - Dequeue从memory pool中申请内存
 - 数据发送成功后，Dequeue的内存再还回到memory pool中
+
+# 缓冲区大小：假如对应partition较多 扩大缓冲区
+RecordAccumulator: 默认为32M
 ```
+
+### 吞吐量
+
+- batch.size和linger.ms满足其中一个, sender-thread 就可以从RecordAccumulattor 发送到cluster
+
+```bash
+# 实时性 vs 高性能
+- batch.size 和 linger.ms
+
+# 适当扩大缓冲区
+
+# 数据进行压缩，有不同的压缩格式： gzip, snappy, lz4, zstd, snappy用的较多
+- compression.type: 压缩 snappy
+- 确保数据发送方和消费方使用同一种压缩算法
+```
+
+![image-20220906171442070](https://erick-typora-image.oss-cn-shanghai.aliyuncs.com/img/image-20220906171442070.png)
 
 ## 5. Sender-Thread
 
@@ -193,7 +227,7 @@
 
 ```bash
 # 参数： acks 
-# 0： 一般很少使用
+# 0： 基本不用
 - producer发送数据，不需要等数据落盘应答，即将数据的Request进行删除
        # 问题
        - producer发送完，leader还未落盘，leader挂了，数据压根没有发送过去
@@ -210,59 +244,9 @@
       - 假如一个follower因为网络问题，迟迟不能应答，ACK动作一直不能完成
 ```
 
-**动态ISR**
-
-- 分区副本： 指的是leader和follower的集合
-
-```bash
-# ISR:  in-sync replcaition set
-- Leader维护了一个 和Leader保持同步的follower + leader集合      (Leader:0, ISR: 0,1,2)
-
-- 如果follwer长时间未向leader发送通信请求或同步数据，该follower将被踢出ISR， (Leader:0, ISR: 0,1)
-
-# 参数
-- replica.lag.time.max.ms:      默认为30s  
-```
-
-## 7. 发送
-
-- 异步发送： 消息发送到缓冲区后，并不关心后续的处理
-- 同步发送： 数据发送到对应缓冲队列后，必须要等数据全部落盘到Kafka Cluster中并进行应答，才算发送成功
-
-```bash
-# 异步发送
-public Future<RecordMetadata> send(ProducerRecord<K, V> record)
-
-# 带回调函数的发送
-public Future<RecordMetadata> send(ProducerRecord<K, V> record, Callback callback)
-
-# 同步发送
-producer.send(new ProducerRecord(topicName, partition, key, value)).get();
-```
-
-![](https://erick-typora-image.oss-cn-shanghai.aliyuncs.com/img/image-20220909110349719.png)
-
 # Produce-调优
 
 - 参数可以在配置文件中调节作为全局配置， 也可以在代码端调节作为局部配置
-
-## 1 吞吐量
-
-- batch.size和linger.ms满足其中一个, sender-thread 就可以从RecordAccumulattor 发送到cluster
-
-```bash
-# 实时性 vs 高性能
-- batch.size: 批次大小，默认为16k
-- linger.ms: 等待时间， 单位为ms，默认0ms
-
-# 数据进行压缩，有不同的压缩格式： gzip, snappy, lz4, zstd, snappy用的较多
-- compression.type: 压缩 snappy
-
-# 缓冲区大小：假如对应partition较多 扩大缓冲区
-RecordAccumulator: 默认为32M
-```
-
-![image-20220906171442070](https://erick-typora-image.oss-cn-shanghai.aliyuncs.com/img/image-20220906171442070.png)
 
 ## 2. 消息可靠
 
@@ -360,11 +344,11 @@ max.in.flight.requests.per.connection=1
 - 如果需要绝对有序，则建议发送消息时候用单分区
 
 ```bash
-# 使用单分区
+# 单分区
 - 发送数据时候，指定分区
 - 单分区的数据，kafka的幂等性保证其有序
 
-# 使用单一生产者
+# 单一生产者
 - 如果多个producer一起向某个分区发送数据，则依然可能乱序
 ```
 
@@ -428,40 +412,6 @@ max.in.flight.requests.per.connection=1
 ```
 
 # Broker Server
-
-## 1. 分区副本
-
-### 1.1 数据可靠
-
-- 防止单节点故障，提高数据可靠性
-- producer和consumer都是和leader进行通讯
-
-```bash
-# 1. 副本数量
-- 默认为1个，生产环境一般2个(一个leader，一个follower)
-- 太多副本： 进一步提高数据可靠性。 但会增加磁盘存储空间，增加网络数据传输，降低效率
-- 一般副本数量为Kafka集群的server数量-1
-
-# 2. 副本信息  AR = ISR + OSR
-   # AR (Assigned Replicas) 
-   - 分区中所有的副本， 包含leader和follower
-   
-   # ISR(In-sync Replcaition Set)
-   - 和leader保持同步的follwer集合，包括leader + follower
-   - 如果某follower长时间未向leader发送通信请求或同步数据，该follower就会被踢出ISR
-   - replica.lag.time.max.ms:30000     默认30s
-   
-   - 如果leader挂了，则会从follower中重新选出新的follower
-        
-   # OSR
-   - follower和副本同步时，延迟过大的副本集合
-```
-
-### 1.2 副本架构
-
-- 副本数量为3的数据架构
-
-![image-20240323103027573](https://erick-typora-image.oss-cn-shanghai.aliyuncs.com/img/image-20240323103027573.png)
 
 ## 2. 文件存储
 
@@ -636,7 +586,7 @@ log.rentention.bytes:
 # consumer组：
 - 一个consumer可以消费多个partition中数据
 - 消费者组中，不同consumer，可分别消费不同partition中数据
-- 消费者组中，多个consumer，不能同时消费同一个partition(引发重复)
+- 消费者组中，多个consumer，不能同时消费同一个partition(引发重复,kafka直接杜绝了这个)
 - 消费者组中，consumer超过了partition数，则一部分consumer处于空闲状态
 
 # tips

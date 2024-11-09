@@ -118,14 +118,14 @@ password: 123456
 # 安装Kafka
 
 - 集群版本：1台zookeeper，3台kafka组成集群
-- Kafka版本： 3.2.1
+- Kafka版本： 3.6.1
 
 ## 1. 启动zookeeper
 
 ```bash
-# 1. 在服务器上39.105.210.163 安装zookeeper    2G内存
+# 1. 在服务器上139.224.249.175 安装zookeeper    2G内存
 docker pull zookeeper:3.8
-docker run --privileged --name zookeeper -p 2181:2181 --restart always -d d079516ebe6b
+docker run --privileged --name zookeeper -p 2181:2181 --restart always -d 36c607e7b14d
 ```
 
 ## 2. Kafka集群安装
@@ -135,16 +135,15 @@ docker run --privileged --name zookeeper -p 2181:2181 --restart always -d d07951
 
 ### 2.1 安装
 
-- [官网下载](https://kafka.apache.org/downloads)
 - kafka的broker端是用scala写的
-- 2.12/2.13代表的是scala的版本， 后面的3.2.1代表的是kafka版本
+- 2.12/2.13代表的是scala的版本， 后面的3.6.1代表的是kafka版本
 
-![image-20220909075507491](https://erick-typora-image.oss-cn-shanghai.aliyuncs.com/img/image-20220909075507491.png)
+![image-20241109163233198](https://erick-typora-image.oss-cn-shanghai.aliyuncs.com/img/image-20241109163233198.png)
 
 ### 2.2 上传
 
 - Kafka的运行需要有java环境，选择安装java17
-- 阿里云服务器     118.31.237.198    120.55.75.185      118.178.93.223
+- 阿里云服务器     139.224.192.251    47.100.49.77       106.14.127.122
 
 ```bash
 # 第一台服务器
@@ -152,8 +151,8 @@ cd usr/local
 mkdir kafka
 
 # 1. 上传文件并解压
-put /Users/shuzhan/Desktop/kafka_2.12-3.2.1.tgz /usr/local/kafka
-tar -zxvf kafka_2.12-3.2.1.tgz
+put /Users/shuzhan/Desktop/kafka_2.13-3.6.1.tgz /usr/local/kafka
+tar -zxvf kafka_2.13-3.6.1.tgz
 ```
 
 ```bash
@@ -169,7 +168,7 @@ site-docs
 
 ### 2.3 修改配置文件
 
-- /usr/local/kafka/kafka_2.12-3.2.1/config: Kafak的的所有的配置文件
+- /usr/local/kafka/kafka_2.13-3.6.1/config: Kafak的的所有的配置文件
 - server.properties： 该台kafka server端对应的参数
 
 ```bash
@@ -194,7 +193,7 @@ zookeeper.connect=39.105.210.163:2181
 ```bash
 vim /etc/profile
 
-export KAFKA_HOME=/usr/local/kafka/kafka_2.12-3.2.1
+export KAFKA_HOME=/usr/local/kafka/kafka_2.13-3.6.1
 export PATH=$PATH:$KAFKA_HOME/bin
 
 # 刷新环境变量
@@ -206,7 +205,7 @@ source /etc/profile
 ```bash
 # 1. 启动
 # 进入对应目录
-/usr/local/kafka/kafka_2.12-3.2.1
+cd usr/local/kafka/kafka_2.13-3.6.1
 
 # kafka-server-start.sh： 启动的脚本
 # -daemon： 后台启动
