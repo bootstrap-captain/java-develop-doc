@@ -115,8 +115,6 @@ username: default
 password: 123456
 ```
 
-
-
 # 安装Kafka
 
 - 集群版本：1台zookeeper，3台kafka组成集群

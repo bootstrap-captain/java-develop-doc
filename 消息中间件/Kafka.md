@@ -1,6 +1,6 @@
 - *开源的分布式事件流平台(Event Streaming Platform)*
 - *高性能数据管道，流分析，数据集成，关键任务应用*
-- *大数据场景一般采用kafka作为消息队列：缓存/削峰，解耦，异步通信*
+- *大数据场景一般采用kafka作为消息队列：削峰，解耦，异步通信*
 
 ------
 
@@ -41,13 +41,13 @@
 
 ```bash
 # 1. leader-follower机制
-- producer和consumer: 只和leader节点通信
+- producer和consumer: 只和消息的所在的leader节点通信
 - leader获取数据后，会同步到follower节点
 - leader挂掉后，follower有条件会成为新的leader
 
 # 2. consumer group
 - 消费组：同一个消费组内，不同的消费端去连接不同的partition，增大消费能力
-- 同一个消费组内，不同的消费端不能连接同一个partition，否则就重复消费
+- 同一个消费组内，不同的消费端不能连接同一个partition，否则就重复消费(kafka在分组方面就杜绝了这个)
 - 同一个消费组内，一个消费端可以去消费不同partition
 
 # 3. zookeeper
@@ -59,11 +59,11 @@
 ## 3. Java客户端
 
 ```xml
-  <dependency>
-      <groupId>org.apache.kafka</groupId>
-      <artifactId>kafka-clients</artifactId>
-      <version>3.7.0</version>
-  </dependency>
+<dependency>
+    <groupId>org.apache.kafka</groupId>
+    <artifactId>kafka-clients</artifactId>
+    <version>3.9.0</version>
+</dependency>
 ```
 
 # Producer
@@ -79,7 +79,7 @@
 ## 2. Serializer
 
 - 序列化器：跨节点通讯，不用java自带的序列化， 采用轻量级序列化，避免序列化信息太多引发数据过大
-- 对应的消费消息时候，也有反序列化工具
+- 后续消费消息时，也需要配置反序列化工具
 - 对key和value来进行序列化
 
 ```bash
