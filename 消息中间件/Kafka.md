@@ -80,12 +80,12 @@
 
 - APP客户端，调用Kafka的API，向Kafka Cluster端发送数据
 
-![image-20241109233210093](https://erick-typora-image.oss-cn-shanghai.aliyuncs.com/img/image-20241109233210093.png)
+![image-20241110104513323](https://erick-typora-image.oss-cn-shanghai.aliyuncs.com/img/image-20241110104513323.png)
 
 ## 1. Interceptors
 
-- 拦截器：拦截消息，进行一些过滤，可以自定义，一般不使用
-- 假如外部应用中数据作为数据源，导入时候可以通过拦截器进行过滤
+- 拦截器：拦截消息，进行一些过滤，可在Java项目中自定义，一般不用
+- 外部应用(Flume, Flume也会自己带拦截器)作为数据源，导入时候可以通过拦截器进行过滤
 
 ## 2. Serializer
 
@@ -106,20 +106,18 @@
 
 - 分区器：决定数据应该存放在哪个分区
 
-![image-20240322123515926](https://erick-typora-image.oss-cn-shanghai.aliyuncs.com/img/image-20240322123515926.png)
+![image-20241110104909347](https://erick-typora-image.oss-cn-shanghai.aliyuncs.com/img/image-20241110104909347.png)
+
+### 分区优点
 
 ```bash
-# 分区优点
-
 # 数据均衡
 - 数据可以存放在集群不同的broker上
-- 假如每个broker内存配置相同，可以达到负载均衡效果
-- 假如每个broker内存配置不同，可以实现指定负载
-
-# 指定划分
-- 可以自定义分区，从而使不同类型的数据，存放在不同的partion上
-   - 比如根据key，不同数据库的数据，用表名做为key，存放在不同分区
-   - 过滤脏数据
+- 多个broker内存配置相同，可以达到负载均衡效果
+- 多个broker内存配置不同，可以实现指定负载
+    - 可以自定义分区，从而使不同类型的数据，存放在不同的partion上
+    - 比如根据key，不同数据库的数据，用表名做为key，存放在不同分区
+    - 过滤脏数据
 
 # 高并发
 - producer：和单个broker通信 vs 和多个broker通信，效率提升
@@ -132,12 +130,8 @@
 - 假如存在三个broker，kafaka会自动生成有效分区：0，1，2
 
 ```bash
-# DefaultPartitioner： 默认分区策略
-- 指定分区：  指定分区，则使用
-- 按照key：  不指定分区，但存在key，则用key的hash对分区数取模 （比如key的hash为5，分区数量为3，则就存在2号分区内）
-- Stick Partition： 若不指定分区，不存在key，则使用
-                      1.随机选择一个分区，并尽可能一直使用该分区
-                      2.等到该分区的batch已满(batch.size)或已经完成(linger.ms)，则再随机选一个分区(和上一次分区不同)
+# RoundRobinPartitioner： 默认分区策略
+- 尽可能让数据均衡的分布在多个不同的borker上
 
 # 2. 自定义分区器： 
 #    2.1. 实现 package org.apache.kafka.clients.producer.Partitioner 接口
@@ -150,39 +144,36 @@
 - 缓存队列 : 通过分区器生成好的数据，先在JVM本地的DQueue中进行缓存，后续发往对应分区
 - 对应的Topic，有几个分区，就会有几个DQueue
 
-![image-20241109233508661](https://erick-typora-image.oss-cn-shanghai.aliyuncs.com/img/image-20241109233508661.png)
+![image-20241110110545861](https://erick-typora-image.oss-cn-shanghai.aliyuncs.com/img/image-20241110110545861.png)
 
-```bash
-# 两个条件只要达到，就会被后面的sender-thread，从缓冲区中拉取发送到kafka cluster
-  # batch.size: 
-          - 数据以批次的形式进行发送
-          - 当数据积累到batch.size后，sender才会拉取数据
-          - 默认 16k
-  # linger.ms
-          - 如果数据迟迟没有达到batch size， 等到linger.ms时间后，sender也会将数据当作一个批次，进行拉取
-          - 单位为ms，默认0ms，即无延迟发送，但效率较低   
-          
-# memory pool
-- Dequeue从memory pool中申请内存
-- 数据发送成功后，Dequeue的内存再还回到memory pool中
-
-# 缓冲区大小：假如对应partition较多 扩大缓冲区
-RecordAccumulator: 默认为32M
-```
-
-### 吞吐量
+### Trigger
 
 - batch.size和linger.ms满足其中一个, sender-thread 就可以从RecordAccumulattor 发送到cluster
 
 ```bash
+# batch.size: 
+          - 数据以批次的形式进行发送
+          - 当数据积累到batch.size后，sender才会拉取数据
+          - 默认 16k
+# linger.ms
+          - 如果数据迟迟没有达到batch size， 等到linger.ms时间后，sender也会将数据当作一个批次，进行拉取
+          - 默认0ms，即无延迟发送，但效率较低   
+```
+
+### 吞吐量
+
+```bash
 # 实时性 vs 高性能
 - batch.size 和 linger.ms
-
-# 适当扩大缓冲区
+          
+# memory pool
+- Dequeue从memory pool中申请内存
+- 数据发送成功后，Dequeue的内存再还回到memory pool中
+- 假如对应partition较多 扩大缓冲区
 
 # 数据进行压缩，有不同的压缩格式： gzip, snappy, lz4, zstd, snappy用的较多
 - compression.type: 压缩 snappy
-- 确保数据发送方和消费方使用同一种压缩算法
+- 确保发送方和消费方使用同一种压缩算法
 ```
 
 ![image-20220906171442070](https://erick-typora-image.oss-cn-shanghai.aliyuncs.com/img/image-20220906171442070.png)
@@ -200,7 +191,7 @@ RecordAccumulator: 默认为32M
 
 # 参数
 - max.in.flight.requests.per.connection 
-- 每个NetworkClient 和 broker节点最多缓存请求个数，
+- 每个网络链接中最大可同时发送的   数据批次个数
 - 如果发送没有进行ack，则不允许继续发送
 - 值最大为5
 
@@ -214,47 +205,31 @@ RecordAccumulator: 默认为32M
 
 - Kafka cluster收到数据后，会进行leader-follower之间同步， 再进行应答
 
-```bash
-# 应答成功
-- 将数据的request从Sender中删除，将对应的消息从Dqueue中删除
-# 应答失败
-- 则触发重试机制，会继续将Request进行重试
-```
-
-**ACK**
+### 6.1 ack
 
 ![image-20220909155828011](https://erick-typora-image.oss-cn-shanghai.aliyuncs.com/img/image-20220909155828011.png)
 
 ```bash
 # 参数： acks 
 # 0： 基本不用
-- producer发送数据，不需要等数据落盘应答，即将数据的Request进行删除
+- producer发送数据，leader收到数据即ack，不需要等数据落盘，即将数据的Request进行删除
        # 问题
-       - producer发送完，leader还未落盘，leader挂了，数据压根没有发送过去
+       - producer发送完，leader还未落盘，leader挂了，数据就没有发送过去
 
 # 1： 普通日志，允许丢部分数据
-- producer发送数据，leader收到数据落盘并应答
+- producer发送数据，leader收到数据，并落盘后，再ack
       # 问题
-      - producer发送完，leader收到数据落盘并应答
+      - producer发送完，leader收到数据落盘并ack
       - leader还未完成同步，挂了，其他follower成为新的leader后，并没有之前数据
 
 # -1， all： 金融类场景
-- 生产者发送过来的数据，leader和所有的follower都收到后，才进行ACK
+- 生产者发送过来的数据，leader和所有的follower都收到并落盘后，才进行ACK
       # 问题
-      - 假如一个follower因为网络问题，迟迟不能应答，ACK动作一直不能完成
+      - 假如一个follower因为网络问题，迟迟不能应答，ACK动作一直不能完成： 动态ISR
 ```
 
-# Produce-调优
+### 6.2 可靠性
 
-- 参数可以在配置文件中调节作为全局配置， 也可以在代码端调节作为局部配置
-
-## 2. 消息可靠
-
-- 保证数据一定能发送成功
-
-### 2.1 可靠性
-
-- 建立在ACK=-1的基础上，
 - 数据最少发送一次(可能重复发送)
 
 ```bash
@@ -266,9 +241,9 @@ RecordAccumulator: 默认为32M
 
 ![image-20240311112624604](https://erick-typora-image.oss-cn-shanghai.aliyuncs.com/img/image-20240311112624604.png)
 
-### 2.2 重复发送
+### 6.3 重复发送
 
-- broker端收到两条重复的消息
+- 基于上面可靠性，可能发生producer重复发送数据问题
 
 ```bash
 - 假如leader收到数据，向follower同步完成后，在应答瞬间，leader挂了, ack失败 
@@ -278,41 +253,46 @@ RecordAccumulator: 默认为32M
 
 ![image-20240311113827271](https://erick-typora-image.oss-cn-shanghai.aliyuncs.com/img/image-20240311113827271.png)
 
-## 3. 消息重复
+## 7. 消息重复
 
-### 3.1 幂等性
+### 幂等性
 
-- producer不论向broker发送多少次重复数据，broker端都只会持久化一次，保证不重复
-- 开启幂等：enable.idempotence:true     默认true    false关闭
+- 一条数据，producer不论向broker发送多少次，broker端都只会持久化一次
+- 只能保证： 单分区单会话，不可重复性
 
 ```bash
-# Producer发送数据时，会生成<PID + Partition + SeqNumber>，作为消息的主键
+# enable.idempotence:true         默认true 
 
-# Kafak Server端会缓存这个主键，来进行消息去重， 如果数据重复，就会在内存中将数据删除，不会进行落盘
+# Producer发送数据时
+- 生成<PID + Partition + SeqNumber>，作为消息的主键
+# Kafak Server端
+- 缓存这个主键，来进行消息去重， 如果数据重复，就会在内存中将数据删除，不会进行落盘
 
 # PID: ProducerID
-- 在Producer初始化时分配，作为每个Producer会话的唯一标识
-- 每创建一个新的Producer, 就会分配一个新的PID
+- producer的唯一标识
+- Kafka重启后，对应的ProducerId就会分配新的(单会话)
 
 # Sequence Number
-- Producer发送的每条消息（更准确地说是每一个消息批次，即ProducerBatch）都会带有此序列号
+- Producer发送的每批次消息都会带有此序列号
 - 单调递增，从0开始
 - 属于Producer的属性
 
 # Partition
 - 分区
-
-# 只能保证： 单分区单会话，不可重复性
 ```
 
-### 3.2 事务
+- Kafaka如果挂了重启后，依然可能数据重复
+
+![image-20241112124241549](https://erick-typora-image.oss-cn-shanghai.aliyuncs.com/img/image-20241112124241549.png)
+
+### 事务
 
 - 开启事务，必须开启幂等性
-- TODO
+- 保证多分区多会话
 
-## 4.有序性
+## 8.有序性
 
-###  4.1 单分区
+###  8.1 单分区
 
 - broker端，最多会缓存producer发过来的最近5个request批次的元数据，可以保证该批数据是有序的
 - 数据落盘后并ack后，会从缓存队列中删除
@@ -320,39 +300,46 @@ RecordAccumulator: 默认为32M
 ```bash
 #  1. broker接受到request1和request2，落盘后进行ack
 #  2. request3发送后，假如本次发送时间较长，broker迟迟没有接受到该request
-#  3. 后续的request4和request5发送过来后， 通过序列号发现前面还有待落盘的request3， 则request4和request5暂时保存在内存中
+#  3. 后续request4和request5发送过来后， 通过序列号发现前面还有待落盘的request3，则request4和request5暂时保存在内存中
 #  4. request3完成落盘后，request4和request5再完成
 
 #   开启幂等性
 enable.idempotence=true                   # 需要用到其中的自增的sequence number来进行request元数据的排序
-max.in.flight.requests.per.connection=5   # 需要设置小于等于5， 每个链接中发送的数据数量
+max.in.flight.requests.per.connection=5   # 需要设置小于等于5， 每个网络链接中最大可同时发送的   数据批次
 
 # 未开启幂等性
 # 该值为1时，才能保证幂等性
 max.in.flight.requests.per.connection=1
+
+
+# max.in.flight.requests.per.connection=5
+- 假如其中两个发送失败，进行了retry，就会一直占据两个链接(retry机制)
+- 假如其中5个发送失败，并且一直进行retry，消息发送就直接被block了
+
+# max.in.flight.requests.per.connection=1
+- 假如一条消息一直发送失败，则就会block后续所有的数据发送
 ```
 
 ![image-20220907091648873](https://erick-typora-image.oss-cn-shanghai.aliyuncs.com/img/image-20220907091648873.png)
 
-### 4.2 跨分区
+### 8.2 跨分区
 
 - 多分区，分区与分区间数据无序
 - 如果要实现跨分区有序，可以发送数据时指定key，然后在consumer端进行数据重排，效率低
 
-### 4.3 绝对有序
+### 8.3 绝对有序
 
 - 如果需要绝对有序，则建议发送消息时候用单分区
 
 ```bash
 # 单分区
 - 发送数据时候，指定分区
-- 单分区的数据，kafka的幂等性保证其有序
 
 # 单一生产者
 - 如果多个producer一起向某个分区发送数据，则依然可能乱序
 ```
 
-## 5. 调优
+## 9. 调优
 
 - 上面参数，在项目启动后，可以通过日志查看到对应的参数
 
