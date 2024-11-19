@@ -398,158 +398,6 @@ max.in.flight.requests.per.connection=1
 - 默认值： none
 ```
 
-# Broker Server
-
-## 2. 文件存储
-
-### 2.1 存储方式
-
-- Topic是逻辑概念，Partition是物理概念
-
-![](https://erick-typora-image.oss-cn-shanghai.aliyuncs.com/img/image-20220910110525667.png)
-
-#### 存储位置
-
-- 配置文件中配置data存储的位置
-- 每个topic的每个partition对应一个文件目录，包含对应的消息的文件
-
-```bash
-# 1. /kafka/data/citi-0 ， 包含leader的数据和其他partition的follower的数据
-- 因此会出现比如 citi-0    citi-1两个目录， 是因为其中一个是leader数据，另外一个是其他partition的follower数据
-
-# 2. segment：一个topic+partitionNo 中的数据，会再次切分为多个segment，每个segment大小为1G
-# /usr/local/kafka/kafka_2.12-3.2.1/config/server.properties
-- log.segment.bytes=1073741824
-```
-
-#### 存储内容
-
-```bash
-# 每个segment的文件内容如下， 同时引入分片和索引机制
-00000000000000000000.log：            # 具体的消息， 序列化后的数据
-00000000000000000000.index ：         # 文件数据的索引
-00000000000000000000.timeindex：      # 时间戳索引文件，用来删除数据，默认保留7天
-leader-epoch-checkpoint:              # 是不是leader
-partition.metadata:                   # 元数据信息
-
-# 新的segment： 会根据绝对offset来作为文件命名规则
-- 00000000000000004096.log
-- 00000000000000004096.index
-- 00000000000000004096.timeindex
-```
-
-#### 稀疏索引
-
-- 通过不同的index，能够快速定位到消息
-- index采用稀疏索引，大约每往.log文件中写入4k数据，才会往index里面写入一条索引
-
-```bash
-log.index.interval.bytes:4kb
-```
-
-#### 数据查找
-
-![image-20240315210103367](https://erick-typora-image.oss-cn-shanghai.aliyuncs.com/img/image-20240315210103367.png)
-
-```bash
-# 1. 根据offset，定位segment文件
-# 2. 找到小于等于目标offset的最大offset对应的索引项
-# 3. 定位到log文件
-# 4. 向下遍历，找到目标Record
-```
-
-#### 数据添加
-
-- 产生的新数据，不断追加到该.log文件末尾
-- 速度较快
-
-### 2.2 清除策略
-
-```bash
-# 默认时间： 默认数据保存7天，到期后通过清除策略处理
-# 配置以下不同方式，优先级从低到高
-# /usr/local/kafka/kafka_2.12-3.2.1/config/server.properties
-log.rentention.hours:
-log.rentention.minutes:
-log.rentention.ms:
-
-# 负责检查周期，默认5min
-log.rentention.check.interval.ms:  
-```
-
-#### DELETE策略
-
-- log.cleanup.policy=delete
-- 默认选择
-
-```bash
-# 基于时间： 
-- 默认打开，通过segment中所有记录中的 最大时间戳 作为该文件时间戳
-- 一个segment中包含过期的和不过期的，则选取最大的，就不会删除
-
-log.rentention.hours:
-
-# 基于大小： 默认关闭，表示无穷大，永不过期
-#                 超过设置的所有日志总大小，删除最早的segment
-#                 放置数据超过服务器最大硬盘，删除最早的segment
-log.rentention.bytes: 
-```
-
-#### COMPACT策略
-
-- log.cleanup.policy = compact
-- 默认关闭
-
-```bash
-# 针对相同key的不同value，只保留最后一个版本
-- 适合场景： 消息的key是用户ID，value是用户资料
-
-- 压缩后的offset可能是不连续的，比如没有6，当从这个offset开始消费时，将会拿到比这个offset大的offset对应的消息，即为7
-```
-
-![image-20220910151147907](https://erick-typora-image.oss-cn-shanghai.aliyuncs.com/img/image-20220910151147907.png)
-
-## 3. 高效读写
-
-### 3.1 分布式集群
-
-- 分布式集群，分区技术，producer和conusmer并行度高
-
-### 3.2 稀疏索引
-
-- 读数据采用稀疏索引，可以快速定位到要消费的数据
-
-### 3.3 顺序写磁盘
-
-- producer产生的数据，在写入到log文件中时，追加到文件末端，为顺序写
-- 官网数据： 同样的磁盘，顺序写能达到600M/s,  随机写只有 100k/s
-
-### 3.4 页缓存和零拷贝
-
- **非零拷贝**
-
-![image-20220910152331731](https://erick-typora-image.oss-cn-shanghai.aliyuncs.com/img/image-20220910152331731.png)
-
-**零拷贝**
-
-- kafka采用零拷贝和页缓存，重度依赖操作系统提供的PageCache功能
-- 不需将数据加载到kafka broker VM中，kafka broker不需data process，而是交给producer和consumer
-
-```bash
-# 页缓存
-- 操作系统提供的功能
-- 写操作时，只是将数据写入到PageCache
-- 读操作时，先从PageCache中找，再去磁盘中找
-- 尽可能多的把多的空闲内存当作了磁盘缓存来用
-- NIC: 网卡
-
-# 零拷贝
-- kafka server端不对数据做任何操作
-- 具体的操作都交给对应的producer和consumer
-```
-
-![image-20220910152933842](https://erick-typora-image.oss-cn-shanghai.aliyuncs.com/img/image-20220910152933842.png)
-
 # Consumer
 
 ```bash
@@ -570,11 +418,10 @@ log.rentention.bytes:
 ## 2. consumer组
 
 ```bash
-# consumer组：
-- 一个consumer可以消费多个partition中数据
-- 消费者组中，不同consumer，可分别消费不同partition中数据
-- 消费者组中，多个consumer，不能同时消费同一个partition(引发重复,kafka直接杜绝了这个)
-- 消费者组中，consumer超过了partition数，则一部分consumer处于空闲状态
+# consumer组中：
+- 不同consumer，可分别消费不同partition中数据
+- 多个consumer，不能同时消费同一个partition(引发重复,kafka直接杜绝了这个)
+- consumer超过了partition数，则一部分consumer处于idle状态
 
 # tips
 - 引入主要目的是为了快速消费不同partition
@@ -856,4 +703,156 @@ auto.offset.reset=latest
 - 消费者最多等待时间，就会去拉取数据
 - 默认值： 500ms
 ```
+
+# Broker Server
+
+## 2. 文件存储
+
+### 2.1 存储方式
+
+- Topic是逻辑概念，Partition是物理概念
+
+![](https://erick-typora-image.oss-cn-shanghai.aliyuncs.com/img/image-20220910110525667.png)
+
+#### 存储位置
+
+- 配置文件中配置data存储的位置
+- 每个topic的每个partition对应一个文件目录，包含对应的消息的文件
+
+```bash
+# 1. /kafka/data/citi-0 ， 包含leader的数据和其他partition的follower的数据
+- 因此会出现比如 citi-0    citi-1两个目录， 是因为其中一个是leader数据，另外一个是其他partition的follower数据
+
+# 2. segment：一个topic+partitionNo 中的数据，会再次切分为多个segment，每个segment大小为1G
+# /usr/local/kafka/kafka_2.12-3.2.1/config/server.properties
+- log.segment.bytes=1073741824
+```
+
+#### 存储内容
+
+```bash
+# 每个segment的文件内容如下， 同时引入分片和索引机制
+00000000000000000000.log：            # 具体的消息， 序列化后的数据
+00000000000000000000.index ：         # 文件数据的索引
+00000000000000000000.timeindex：      # 时间戳索引文件，用来删除数据，默认保留7天
+leader-epoch-checkpoint:              # 是不是leader
+partition.metadata:                   # 元数据信息
+
+# 新的segment： 会根据绝对offset来作为文件命名规则
+- 00000000000000004096.log
+- 00000000000000004096.index
+- 00000000000000004096.timeindex
+```
+
+#### 稀疏索引
+
+- 通过不同的index，能够快速定位到消息
+- index采用稀疏索引，大约每往.log文件中写入4k数据，才会往index里面写入一条索引
+
+```bash
+log.index.interval.bytes:4kb
+```
+
+#### 数据查找
+
+![image-20240315210103367](https://erick-typora-image.oss-cn-shanghai.aliyuncs.com/img/image-20240315210103367.png)
+
+```bash
+# 1. 根据offset，定位segment文件
+# 2. 找到小于等于目标offset的最大offset对应的索引项
+# 3. 定位到log文件
+# 4. 向下遍历，找到目标Record
+```
+
+#### 数据添加
+
+- 产生的新数据，不断追加到该.log文件末尾
+- 速度较快
+
+### 2.2 清除策略
+
+```bash
+# 默认时间： 默认数据保存7天，到期后通过清除策略处理
+# 配置以下不同方式，优先级从低到高
+# /usr/local/kafka/kafka_2.12-3.2.1/config/server.properties
+log.rentention.hours:
+log.rentention.minutes:
+log.rentention.ms:
+
+# 负责检查周期，默认5min
+log.rentention.check.interval.ms:  
+```
+
+#### DELETE策略
+
+- log.cleanup.policy=delete
+- 默认选择
+
+```bash
+# 基于时间： 
+- 默认打开，通过segment中所有记录中的 最大时间戳 作为该文件时间戳
+- 一个segment中包含过期的和不过期的，则选取最大的，就不会删除
+
+log.rentention.hours:
+
+# 基于大小： 默认关闭，表示无穷大，永不过期
+#                 超过设置的所有日志总大小，删除最早的segment
+#                 放置数据超过服务器最大硬盘，删除最早的segment
+log.rentention.bytes: 
+```
+
+#### COMPACT策略
+
+- log.cleanup.policy = compact
+- 默认关闭
+
+```bash
+# 针对相同key的不同value，只保留最后一个版本
+- 适合场景： 消息的key是用户ID，value是用户资料
+
+- 压缩后的offset可能是不连续的，比如没有6，当从这个offset开始消费时，将会拿到比这个offset大的offset对应的消息，即为7
+```
+
+![image-20220910151147907](https://erick-typora-image.oss-cn-shanghai.aliyuncs.com/img/image-20220910151147907.png)
+
+## 3. 高效读写
+
+### 3.1 分布式集群
+
+- 分布式集群，分区技术，producer和conusmer并行度高
+
+### 3.2 稀疏索引
+
+- 读数据采用稀疏索引，可以快速定位到要消费的数据
+
+### 3.3 顺序写磁盘
+
+- producer产生的数据，在写入到log文件中时，追加到文件末端，为顺序写
+- 官网数据： 同样的磁盘，顺序写能达到600M/s,  随机写只有 100k/s
+
+### 3.4 页缓存和零拷贝
+
+ **非零拷贝**
+
+![image-20220910152331731](https://erick-typora-image.oss-cn-shanghai.aliyuncs.com/img/image-20220910152331731.png)
+
+**零拷贝**
+
+- kafka采用零拷贝和页缓存，重度依赖操作系统提供的PageCache功能
+- 不需将数据加载到kafka broker VM中，kafka broker不需data process，而是交给producer和consumer
+
+```bash
+# 页缓存
+- 操作系统提供的功能
+- 写操作时，只是将数据写入到PageCache
+- 读操作时，先从PageCache中找，再去磁盘中找
+- 尽可能多的把多的空闲内存当作了磁盘缓存来用
+- NIC: 网卡
+
+# 零拷贝
+- kafka server端不对数据做任何操作
+- 具体的操作都交给对应的producer和consumer
+```
+
+![image-20220910152933842](https://erick-typora-image.oss-cn-shanghai.aliyuncs.com/img/image-20220910152933842.png)
 

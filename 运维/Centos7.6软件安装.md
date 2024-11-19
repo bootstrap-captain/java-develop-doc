@@ -61,7 +61,7 @@ Java HotSpot(TM) 64-Bit Server VM (build 17.0.4.1+1-LTS-2, mixed mode, sharing)
 - 版本地址：https://download.redis.io/releases/
 
 ```bash
-# 1. mac控制台上传文件到centos服务器中的opt目录下, 利用mac自带的sftp并解压
+# 1. 上传文件到linux
 put /Users/shuzhan/Desktop/redis-7.2.4.tar.gz /opt
 tar -zxvf redis-7.2.4.tar.gz
 
