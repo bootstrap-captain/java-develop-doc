@@ -47,7 +47,7 @@
 ## 3. 副本
 
 - 防止单节点故障，提高数据可靠性
-- 副本数量：leader+follower数
+- 副本数量：leader+follower
 
 ```bash
 # 1. leader-follower机制
@@ -78,7 +78,7 @@
 
 # Producer
 
-- APP客户端，调用Kafka的API，向Kafka Cluster端发送数据
+- 客户端，调用Kafka的API，向Kafka Cluster端发送数据
 
 ![image-20241110104513323](https://erick-typora-image.oss-cn-shanghai.aliyuncs.com/img/image-20241110104513323.png)
 
@@ -108,14 +108,14 @@
 
 ![image-20241110104909347](https://erick-typora-image.oss-cn-shanghai.aliyuncs.com/img/image-20241110104909347.png)
 
-### 分区优点
+### 优点
 
 ```bash
 # 数据均衡
 - 数据可以存放在集群不同的broker上
-- 多个broker内存配置相同，可以达到负载均衡效果
-- 多个broker内存配置不同，可以实现指定负载
-    - 可以自定义分区，从而使不同类型的数据，存放在不同的partion上
+- brokers内存配置相同，---> 负载均衡
+- brokers内存配置不同，---> 指定负载
+    - 自定义分区，使不同类型数据，存放在不同的partion上
     - 比如根据key，不同数据库的数据，用表名做为key，存放在不同分区
     - 过滤脏数据
 
@@ -124,10 +124,10 @@
 - consumer：可以以分区为单位消费数据
 ```
 
-### 分区策略
+### 策略
 
 - 分区数：0，1，2等， 根据broker节点向zookeeper注册时间和数目来判断
-- 假如存在三个broker，kafaka会自动生成有效分区：0，1，2
+- 假如存在三个broker，kafaka自动生成有效分区：0，1，2
 
 ```bash
 # RoundRobinPartitioner： 默认分区策略
@@ -141,12 +141,12 @@
 
 ## 4. RecordAccumulator
 
-- 缓存队列 : 通过分区器生成好的数据，先在JVM本地的DQueue中进行缓存，后续发往对应分区
+- 分区器生成好的数据，先在JVM本地的DQueue中进行缓存，后续发往对应分区
 - 对应的Topic，有几个分区，就会有几个DQueue
 
 ![image-20241110110545861](https://erick-typora-image.oss-cn-shanghai.aliyuncs.com/img/image-20241110110545861.png)
 
-### Trigger
+### trigger
 
 - batch.size和linger.ms满足其中一个, sender-thread 就可以从RecordAccumulattor 发送到cluster
 
@@ -160,7 +160,7 @@
           - 默认0ms，即无延迟发送，但效率较低   
 ```
 
-### 吞吐量
+### concurrency
 
 ```bash
 # 实时性 vs 高性能
@@ -169,9 +169,9 @@
 # memory pool
 - Dequeue从memory pool中申请内存
 - 数据发送成功后，Dequeue的内存再还回到memory pool中
-- 假如对应partition较多 扩大缓冲区
+- 假如partition较多 扩大缓冲区
 
-# 数据进行压缩，有不同的压缩格式： gzip, snappy, lz4, zstd, snappy用的较多
+# 数据压缩，不同压缩格式： gzip, snappy, lz4, zstd,           snappy用的较多
 - compression.type: 压缩 snappy
 - 确保发送方和消费方使用同一种压缩算法
 ```
@@ -180,7 +180,7 @@
 
 ## 5. Sender-Thread
 
-- 将上面RecordAccumulator中的数据，发送到Kafka的cluster中
+- 将RecordAccumulator中的数据，发送到Kafka的cluster中
 
 ```bash
 # 1. Sender-Thread
@@ -188,60 +188,45 @@
 
 # 2. Selector
 - 将数据发送到对应的broker的对应partition
-
-# 参数
-- max.in.flight.requests.per.connection 
-- 每个网络链接中最大可同时发送的   数据批次个数
-- 如果发送没有进行ack，则不允许继续发送
-- 值最大为5
-
-# 重试机制
-- 发送失败，会进行重试
-- 参数 ： retries
-- 默认为int的最大次数
 ```
 
 ## 6. ACK
 
 - Kafka cluster收到数据后，会进行leader-follower之间同步， 再进行应答
 
-### 6.1 ack
-
 ![image-20220909155828011](https://erick-typora-image.oss-cn-shanghai.aliyuncs.com/img/image-20220909155828011.png)
 
 ```bash
 # 参数： acks 
 # 0： 基本不用
-- producer发送数据，leader收到数据即ack，不需要等数据落盘，即将数据的Request进行删除
+- leader收到数据即ack，不用等数据落盘，即将数据的Request进行删除
        # 问题
        - producer发送完，leader还未落盘，leader挂了，数据就没有发送过去
 
 # 1： 普通日志，允许丢部分数据
-- producer发送数据，leader收到数据，并落盘后，再ack
+- leader收到数据，并落盘后，再ack
       # 问题
       - producer发送完，leader收到数据落盘并ack
       - leader还未完成同步，挂了，其他follower成为新的leader后，并没有之前数据
 
 # -1， all： 金融类场景
-- 生产者发送过来的数据，leader和所有的follower都收到并落盘后，才进行ACK
+- leader和所有的follower都收到并落盘后，才进行ACK
       # 问题
       - 假如一个follower因为网络问题，迟迟不能应答，ACK动作一直不能完成： 动态ISR
 ```
 
-### 6.2 可靠性
+### 6.1 可靠性
 
 - 数据最少发送一次(可能重复发送)
 
 ```bash
-# min.insync.replicas = 1         副本应答最小 默认为1
-- ACK=-1 
+# min.insync.replicas = 1        ISR中应答的最小副本数量 默认为1
+- ACK = -1 
 - 分区副本 >= 2 
 - ISR中应答的最小副本数量 >= 2        #  默认为1
 ```
 
-![image-20240311112624604](https://erick-typora-image.oss-cn-shanghai.aliyuncs.com/img/image-20240311112624604.png)
-
-### 6.3 重复发送
+### 6.2 重复发送
 
 - 基于上面可靠性，可能发生producer重复发送数据问题
 
@@ -255,10 +240,9 @@
 
 ## 7. 消息重复
 
-### 幂等性
+### 幂等性-单分区单会话
 
 - 一条数据，producer不论向broker发送多少次，broker端都只会持久化一次
-- 只能保证： 单分区单会话，不可重复性
 
 ```bash
 # enable.idempotence:true         默认true 
@@ -267,23 +251,21 @@
 - 生成<PID + Partition + SeqNumber>，作为消息的主键
 # Kafak Server端
 - 缓存这个主键，来进行消息去重， 如果数据重复，就会在内存中将数据删除，不会进行落盘
+- 解决上面应答失败，造成的消息重复问题
 
-# PID: ProducerID
-- producer的唯一标识
-- Kafka重启后，对应的ProducerId就会分配新的(单会话)
+     # PID: ProducerID
+       - producer的唯一标识
+       - Kafka重启后，对应的ProducerId就会重新分配(单会话)
+       - kafka挂了重启后，app重连后，消息发送依然可能重复
 
-# Sequence Number
-- Producer发送的每批次消息都会带有此序列号
-- 单调递增，从0开始
-- 属于Producer的属性
+    # Sequence Number
+      - Producer发送的每批次消息都会带有此序列号
+      - 单调递增，从0开始
+      - 属于Producer的属性
 
-# Partition
-- 分区
+    # Partition
+      - 分区
 ```
-
-- Kafaka如果挂了重启后，依然可能数据重复
-
-![image-20241112124241549](https://erick-typora-image.oss-cn-shanghai.aliyuncs.com/img/image-20241112124241549.png)
 
 ### 事务
 
@@ -318,6 +300,11 @@ max.in.flight.requests.per.connection=1
 
 # max.in.flight.requests.per.connection=1
 - 假如一条消息一直发送失败，则就会block后续所有的数据发送
+
+# 重试机制
+- 发送失败，会进行重试
+- 参数 ： retries
+- 默认为int的最大次数
 ```
 
 ![image-20220907091648873](https://erick-typora-image.oss-cn-shanghai.aliyuncs.com/img/image-20220907091648873.png)
@@ -401,12 +388,12 @@ max.in.flight.requests.per.connection=1
 # Consumer
 
 ```bash
-# pull模式: kafka采取的模式
+# pull: kafka采取的模式
 - consumer主动从broker中拉取数据    
 - consumer根据自身的消费消息的速率，进行适当的拉取
-- 若kafka没有数据，可能陷入死循环
+- 若kafka没有数据，consumer需要不断询问，消费消费者资源
 
-# push模式
+# push
 - broker向consumer推送消息
 - broker决定推送消息的速率，难以满足不同consumer
 ```
@@ -417,43 +404,74 @@ max.in.flight.requests.per.connection=1
 
 ## 2. consumer组
 
+- consumer group，通过groupId来区分，不同consumer group，是独立的消费者
+- consumer group中可包含多个consumer
+
 ```bash
-# consumer组中：
-- 不同consumer，可分别消费不同partition中数据
-- 多个consumer，不能同时消费同一个partition(引发重复,kafka直接杜绝了这个)
-- consumer超过了partition数，则一部分consumer处于idle状态
+# 同一消费者组
+- 同一个partition，只能被一个consumer消费(引发重复,kafka直接杜绝了这个)
+- consumer数量超过了partition数，则一部分consumer处于idle状态
 
 # tips
 - 引入主要目的是为了快速消费不同partition
-- 一个consumer组包含多个consumer，多个consumer要采用相同的groupId
 
 group.id="citi-erick"
 ```
 
-### 2.1 消费组初始化
+### 2.1 consumer group initialization
+
+- coordinator：辅助实现consumer组的初始化和分区配置
+- 每个broker节点都有对应的coordinator
 
 ```bash
-# coordinator: 辅助实现consumer组的初始化和分区配置
-- 每个broker节点都有对应的coordinator
-- 目标coordinator节点 = hashCode(groupId) % 50 (_consumer_offsets的分区数量，可以调整)
-- 目标coordinator：进行consumer组的初始化和分区配置
-- 消费者组选出目标coordinator后，与其通信进行消息处理
+# consumer_offses的分区数量： 默认为50
+
+# 目标coordinator节点 = hashCode(groupId) % 50 (_consumer_offsets的分区数量，可以调整)
+      - hashCode(groupId)%50 = 1, 则对应的分区数为1
+      - consumer_offsets的1号分区上，对应的broker刚好为1
+      - 则选取broker-1的coordinator作为目标
 ```
 
-![image-20220910112933763](https://erick-typora-image.oss-cn-shanghai.aliyuncs.com/img/image-20220910112933763.png)
+![image-20241125104654879](https://erick-typora-image.oss-cn-shanghai.aliyuncs.com/img/image-20241125104654879.png)
 
-### 2.2 消费过程
+### 2.2 rebalance
+
+- 三个参数都是在consumer端进行配置
+- 再平衡会影响Kafka的性能
+
+```bash
+# heartbeat
+- 每个consumer都会向coordinator保持心跳
+- 默认3s
+- heartbeat.interval.ms=3000         
+
+# 再平衡
+    # 超时心跳
+    - 超时未发送心跳，该consumer就会被移除，并触发再平衡
+    - 默认45s
+    - session.timuout.ms=45000
+          # 45s内，某个consumer挂掉，则该consumer的任务交给某个consumer去消费
+          # 45s后，consumer依然没有恢复，该consumer就会被移除该消费者组，触发rebanlance
+    
+    # consumer处理消息时间长
+    - consumer处理消息时间过长, 触发rebanlance (会导致重复消费)  
+    - 默认5min
+    - max.poll.interval.ms = 5 min
+         # 将该consumer踢出consumer group，并把任务重新交给其他的consumer去处理，并重新制定消费计划
+         # 有心跳，但是被强制踢出
+```
+
+### 2.3 消费过程
 
 ![image-20220907140144643](https://erick-typora-image.oss-cn-shanghai.aliyuncs.com/img/image-20220907140144643.png)
 
 ```bash
-# 数据大小和时间，满足一个即可
+# 实时性 vs 效率： 二者满足其一即可
+    # 每批次拉取的最小数据：只有大于20k时，才回拉数据
+    fetch.min.byte=20k
 
-# 每批次拉取的最小数据
-fetch.min.byte=1k
-
-# 未达到大小时，超时就会依然拉取
-fetch.max.wait.ms=500ms
+    # 未达到大小时，超时就会依然拉取
+    fetch.max.wait.ms=500ms
 
 # 每批次拉取的最大数据量
 fetch.max.bytes=50m
@@ -462,40 +480,12 @@ fetch.max.bytes=50m
 # Interceptors:  拦截器(可以用来做数据的统计)
 ```
 
-### 2.3 再平衡
-
-- 三个参数都是在consumer端进行配置
-
-```bash
-# 心跳机制
-- 每个consumer都会向coordinator保持心跳
-- 默认3s
-- heartbeat.interval.ms=3000         
-
-# 再平衡
-- 再平衡会影响Kafka的性能
-
-    # 超时心跳
-    - 超时未发送心跳，该consumer就会被移除，并触发再平衡
-    - 默认45s
-    - session.timuout.ms=45000
-          # 45s内，某个consumer挂掉，则该consumer的任务交给某个consumer去消费
-          # 45s后，consumer依然没有恢复，该consumer就会被移除该消费者组，并且重新制定消费计划
-    
-    # consumer处理消息时间长
-    - consumer处理消息时间过长, 也会触发再平衡 (会导致重复消费)  
-    - 默认5min
-    - max.poll.interval.ms = 5 min
-         # 会将该consumer踢出consumer group，并把任务重新交给其他的consumer去处理，并重新制定消费计划
-         # 有心跳，但是被强制踢出
-```
-
 ## 3. 分区分配策略
 
-- consumer-leader在指定消费策略时，消费者组中多个consumer，一个topic多个partition，到底哪个consumer来消费哪个partition
-- partition.assignment.strategy：可以在代代码端配置
+- consumer-leader在制定消费策略时，哪个consumer来消费哪个partition
+- partition.assignment.strategy：可以在代码端配置
 
-### 3.1 Range
+### Range
 
 - 针对单独一个topic而言
 - 默认分区分配策略
@@ -513,7 +503,7 @@ fetch.max.bytes=50m
 
 ![image-20220910113823683](https://erick-typora-image.oss-cn-shanghai.aliyuncs.com/img/image-20220910113823683.png)
 
-### 3.2 RoundRobin
+### RoundRobin
 
 ```bash
 # 分区规则： 针对集群中所有topic
@@ -523,17 +513,9 @@ fetch.max.bytes=50m
 
 ![image-20220910163624443](https://erick-typora-image.oss-cn-shanghai.aliyuncs.com/img/image-20220910163624443.png)
 
-### 3.3 Sticky
-
-```bash
-# 黏性分区
-- 首先会尽量均衡的放置分区到consumer上面
-- 不同于range，会采用随机的方式，将对应的topic的partition分配给不同的consumer
-```
-
 ##  4. offset
 
-- consumer消费一个topic的partition时，假如consumer突然挂掉，下次consumer重启时需要知道从哪里开始继续消费
+- consumer消费topic的partition时，假如consumer挂掉，下次consumer重启时需要知道从哪里开始继续消费
 - offset维护在kafka的系统主题中： _consumer_offsets
 
 ![image-20220907140510556](https://erick-typora-image.oss-cn-shanghai.aliyuncs.com/img/image-20220907140510556.png)
@@ -541,9 +523,10 @@ fetch.max.bytes=50m
 ###  4.1 存储位置
 
 ```bash
-# 存放位置
-- offset信息存放在kafka broker的 名为_consumer_offsets的topic中
-- offset信息是通过k-v的方式存储
+# 存放位置： kafka broker
+- offset信息存放在。 ‘_consumer_offsets’  topic中
+
+ # k-v
 - key： groupId + topic + partition                value: 当前offset值
 - 每隔一段时间，kafka内部会对该topic进行压缩， 即groupId + topic + partition  保留最新数据
 
@@ -553,14 +536,18 @@ fetch.max.bytes=50m
 - 也可consumer端代码中配置参数
 ```
 
-###  4.2 自动offset
+###  4.2 提交方式
+
+####  自动offset--重复消费
 
 - kafka自动存在offset功能
 - 每次提交完毕后，才会继续消费下一批数据
 
 ```bash
-enable.auto.commit:true               # 是否开启自动提交offset功能， 默认为true
-auto.commit.interval.ms:5000          # 自动提交offseet的时间间隔，默认是5s
+# enable.auto.commit:true               
+- 是否开启自动提交offset功能， 默认为true
+# auto.commit.interval.ms:5000          
+- 自动提交offseet的时间间隔，默认是5s
 
 # 1. 每次消费后，consumer不用提交，继续消费后面的数据
 # 2. 5s后，kafka自动将该consumer上一个的offset进行提交
@@ -568,7 +555,16 @@ auto.commit.interval.ms:5000          # 自动提交offseet的时间间隔，默
 
 ![image-20240316164053305](https://erick-typora-image.oss-cn-shanghai.aliyuncs.com/img/image-20240316164053305.png)
 
-###  4.3 手动offset
+- 重复消费： 自动提交offset引发
+
+```bash
+- 如果提交了一次offset，2s后consumer挂了
+- 再次重启consumer，则从上次提交的offset继续消费，导致重复消费
+```
+
+![image-20240316173345390](https://erick-typora-image.oss-cn-shanghai.aliyuncs.com/img/image-20240316173345390.png)
+
+####  手动offset--消息丢失
 
 - 自动提交offset十分简单，但是是基于时间提交的，kafka提供更精准的手动提交的功能
 
@@ -578,7 +574,7 @@ auto.commit.interval.ms:5000          # 自动提交offseet的时间间隔，默
 - 阻塞当前线程，一直到提交成功，才会进行下一批次的消费
 - 并且会自动失败重试(不可控因素导致，提交失败)
 
-# 异步提交---commitAsync, 一般用的比较多
+# 异步提交---commitAsync,    用的比较多
 - 将本次提交的一批数据的offset提交
 - 可能出现提交失败问题
 
@@ -587,7 +583,15 @@ auto.commit.interval.ms:5000          # 自动提交offseet的时间间隔，默
 - 消费完后进行commitAsync或commitSync
 ```
 
-### 4.4 指定offset消费
+- 异步手动提交：消息丢失
+
+```bash
+# 异步手动提交
+- 当offset被提交时，数据还在consumer端正在处理(比如落库)，consumer突然挂了
+- 再次重启consumer，则之前的数据丢失
+```
+
+### 4.3 指定offset消费
 
 ```bash
 # 包含earliest, latest, none
@@ -595,7 +599,7 @@ auto.commit.interval.ms:5000          # 自动提交offseet的时间间隔，默
 # earliest：   
 - 当各分区下有已提交的offset时，从提交的offset开始消费；无提交的offset时，从头开始消费
 
-# latest：     
+# latest：  默认值
 - 当各分区下有已提交的offset时，从提交的offset开始消费；无提交的offset时，消费新产生的该分区下的数据
 
 # none：      
@@ -605,46 +609,7 @@ auto.offset.reset=latest
 # 也可以指定offset或者指定时间进行消费
 ```
 
-##  5. 可靠性
-
-### 5.1 重复消费
-
-- 自动提交offset引发
-
-```bash
-- 如果提交了一次offset，2s后consumer挂了
-- 再次重启consumer，则从上次提交的offset继续消费，导致重复消费
-```
-
-![image-20240316173345390](https://erick-typora-image.oss-cn-shanghai.aliyuncs.com/img/image-20240316173345390.png)
-
-### 5.2 漏消费
-
-- 手动提交offset引发
-
-```bash
-# 异步手动提交
-- 当offset被提交时，数据还在consumer端正在处理(比如落库)，consumer突然挂了
-- 再次重启consumer，则之前的数据丢失
-```
-
-### 5.3 消费者事务
-
-- 如果要确保精确收到一次
-- 需要kafka消费端，将消费过程和提交offset过程做原子绑定，比如和mysql对应
-
-### 5.4 数据积压
-
-- topic中数据默认是保存7天
-- 如果consumer能力不足，可能导致数据丢失
-
-```bash
-- 提高consumer个数和consumer集群
-- 提高consumer每批次拉取数据个数
-- 提高每批次拉取数据的内存上限
-```
-
-## 6. 调优
+## 5. 调优
 
 ```bash
 # bootstrap.servers
@@ -706,15 +671,13 @@ auto.offset.reset=latest
 
 # Broker Server
 
-## 2. 文件存储
-
-### 2.1 存储方式
+## 1. 文件存储
 
 - Topic是逻辑概念，Partition是物理概念
 
 ![](https://erick-typora-image.oss-cn-shanghai.aliyuncs.com/img/image-20220910110525667.png)
 
-#### 存储位置
+### 存储位置
 
 - 配置文件中配置data存储的位置
 - 每个topic的每个partition对应一个文件目录，包含对应的消息的文件
@@ -724,11 +687,11 @@ auto.offset.reset=latest
 - 因此会出现比如 citi-0    citi-1两个目录， 是因为其中一个是leader数据，另外一个是其他partition的follower数据
 
 # 2. segment：一个topic+partitionNo 中的数据，会再次切分为多个segment，每个segment大小为1G
-# /usr/local/kafka/kafka_2.12-3.2.1/config/server.properties
+# server.properties
 - log.segment.bytes=1073741824
 ```
 
-#### 存储内容
+### 存储内容
 
 ```bash
 # 每个segment的文件内容如下， 同时引入分片和索引机制
@@ -744,7 +707,7 @@ partition.metadata:                   # 元数据信息
 - 00000000000000004096.timeindex
 ```
 
-#### 稀疏索引
+### 稀疏索引
 
 - 通过不同的index，能够快速定位到消息
 - index采用稀疏索引，大约每往.log文件中写入4k数据，才会往index里面写入一条索引
@@ -753,7 +716,7 @@ partition.metadata:                   # 元数据信息
 log.index.interval.bytes:4kb
 ```
 
-#### 数据查找
+### 数据查找
 
 ![image-20240315210103367](https://erick-typora-image.oss-cn-shanghai.aliyuncs.com/img/image-20240315210103367.png)
 
@@ -764,12 +727,14 @@ log.index.interval.bytes:4kb
 # 4. 向下遍历，找到目标Record
 ```
 
-#### 数据添加
+### 数据添加
 
 - 产生的新数据，不断追加到该.log文件末尾
 - 速度较快
 
-### 2.2 清除策略
+## 2.清除策略
+
+- 如果consumer能力不足，则可能数据丢失
 
 ```bash
 # 默认时间： 默认数据保存7天，到期后通过清除策略处理
@@ -783,10 +748,10 @@ log.rentention.ms:
 log.rentention.check.interval.ms:  
 ```
 
-#### DELETE策略
+### DELETE
 
 - log.cleanup.policy=delete
-- 默认选择
+- 默认开启
 
 ```bash
 # 基于时间： 
@@ -801,7 +766,7 @@ log.rentention.hours:
 log.rentention.bytes: 
 ```
 
-#### COMPACT策略
+### COMPACT
 
 - log.cleanup.policy = compact
 - 默认关闭
